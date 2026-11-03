@@ -57,6 +57,14 @@ def load_env():
     for k in ("FOODSAFETY_KEY", "FOODSAFETY_BASE_URL"):
         if os.environ.get(k):
             env[k] = os.environ[k]
+    if not env.get("FOODSAFETY_KEY"):
+        # Vercel 화면에서 키를 '값' 대신 '이름' 칸에 붙여 넣어 FOODSAFETY_KEY_<키> 로 저장된 경우를 받아 줌.
+        # 바르게 고치려면 이름 FOODSAFETY_KEY, 값 <키>로 다시 저장 (그러면 이 부분은 쓰이지 않음)
+        for name in os.environ:
+            m = re.fullmatch(r"FOODSAFETY_KEY_([0-9A-Za-z]{16,40})", name)
+            if m:
+                env["FOODSAFETY_KEY"] = m.group(1)
+                break
     return env
 
 
