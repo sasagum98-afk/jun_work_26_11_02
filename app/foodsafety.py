@@ -299,6 +299,43 @@ class FoodData:
         finally:
             self.refreshing.release()
 
+    # -- 온라인판(서버가 여러 개 떴다 꺼졌다 함): 상시 돌아가는 스레드 대신 요청이 올 때 확인
+
+    def age_minutes(self):
+        """가장 오래된 자료가 받은 지 몇 분 지났는지. 자료가 없으면 아주 큰 값"""
+        with self.lock:
+            stamps = [self.fetched_at[s] for s in SERVICES]
+        if not all(stamps):
+            return 10 ** 6
+        oldest = datetime.strptime(min(stamps)[:16], "%Y-%m-%d %H:%M")
+        return (datetime.now() - oldest).total_seconds() / 60
+
+    def sync_from_store(self, every_seconds=300):
+        """다른 서버가 DB에 새 자료를 넣었으면 가져옴 (몇 분에 한 번만 확인)"""
+        t = datetime.now().timestamp()
+        if t - getattr(self, "_synced", 0) < every_seconds:
+            return
+        self._synced = t
+        try:
+            stamps = self.store.cache_stamps()
+        except Exception:  # noqa: BLE001 - DB가 잠깐 안 되면 가진 자료로 계속
+            return
+        for svc in SERVICES:
+            if stamps.get(svc) and stamps[svc] > self.fetched_at[svc]:
+                row = self.store.cache_get(svc)
+                if row:
+                    self._set_rows(svc, json.loads(row["data"]), row["fetched_at"])
+
+    def refresh_if_stale(self, max_age_minutes=REFRESH_SECONDS // 60):
+        """1시간이 지났고 다른 서버가 받는 중이 아니면 새로 받음"""
+        self._synced = 0
+        self.sync_from_store()
+        if self.age_minutes() < max_age_minutes:
+            return {"refreshed": False, "reason": "fresh"}
+        if not self.store.try_refresh_lock():
+            return {"refreshed": False, "reason": "busy"}
+        return {"refreshed": self.refresh(wait=True), "reason": "stale"}
+
     def start_auto_refresh(self):
         def loop():
             stop = threading.Event()
@@ -326,6 +363,7 @@ class FoodData:
             "error_msg": self.error_msg,
             "i2620_since": min(i2620)[:7] if i2620 else "",
             "refresh_minutes": REFRESH_SECONDS // 60,
+            "stale": self.age_minutes() >= REFRESH_SECONDS // 60,
         }
 
     def image_url(self, svc, seq, i):

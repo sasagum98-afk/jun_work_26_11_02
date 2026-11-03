@@ -1,6 +1,7 @@
-"""군 급식 식자재 안전 지키미 (베타) - PC 내부 실행 프로그램.
+"""군 급식 식자재 안전 지키미 (베타).
 
-이 PC(127.0.0.1)에서만 접속을 받습니다. 실행: `실행.cmd` 또는 `python app/server.py`
+- PC판: 이 PC(127.0.0.1)에서만 접속을 받습니다. 실행: `실행.cmd` 또는 `python app/server.py`
+- 온라인판: Vercel 함수(api/index.py)가 이 Handler를 그대로 씀. 기록은 Supabase(DATABASE_URL)
 """
 import csv
 import io
@@ -20,13 +21,15 @@ from urllib.parse import parse_qs, urlparse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from foodsafety import FoodData  # noqa: E402
-from store import ITEM_EDITABLE, Store, check_password  # noqa: E402
+from store import ITEM_EDITABLE, check_password, open_store  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATIC = os.path.join(ROOT, "static")
-DATA = os.environ.get("GUNMEAL_DATA_DIR") or os.path.join(ROOT, "data")  # 시험할 때만 바꿈
-PHOTOS = os.path.join(DATA, "photos")
+ONLINE = bool(os.environ.get("VERCEL"))  # Vercel이 넣어 주는 환경 변수
+# 온라인판은 /tmp만 쓸 수 있음 (꺼지면 사라짐. 기록은 DB에 있음)
+DATA = os.environ.get("GUNMEAL_DATA_DIR") or ("/tmp/gunmeal" if ONLINE else os.path.join(ROOT, "data"))
 CONFIG = os.path.join(ROOT, "config")
+MAX_PHOTO = 4_000_000 if ONLINE else 15_000_000  # Vercel은 요청 본문 4.5MB까지
 APP_ID = "gunmeal-safety-beta"
 PORTS = range(8765, 8776)
 WEEKDAYS = "월화수목금토일"
@@ -146,7 +149,7 @@ def item_view(it):
 class App:
     def __init__(self):
         self.env = load_env()
-        self.store = Store(os.path.join(DATA, "app.db"))
+        self.store = open_store(DATA)
         self.food = FoodData(self.store, self.env)
 
 
@@ -188,8 +191,14 @@ class Handler(BaseHTTPRequestHandler):
         return self.app.store.session_user(self.token())
 
     def host_ok(self):
+        if ONLINE:
+            return True
         host = (self.headers.get("Host") or "").split(":")[0]
         return host in ("127.0.0.1", "localhost")
+
+    def cookie(self, value, max_age):
+        secure = "; Secure" if ONLINE else ""
+        return f"sid={value}; Path=/; Max-Age={max_age}; HttpOnly; SameSite=Strict{secure}"
 
     def do_GET(self):
         self.dispatch("GET")
@@ -248,14 +257,20 @@ class Handler(BaseHTTPRequestHandler):
     def route_api(self, method, p):
         s = self.app.store
         if p == "ping":
-            return self.send_json({"app": APP_ID})
+            return self.send_json({"app": APP_ID, "online": ONLINE})
+        if p == "cron":
+            # 온라인판 자료 갱신: 1시간이 지났을 때만 실제로 받음 (누가 불러도 그 이상 자주 받지 않음)
+            r = self.app.food.refresh_if_stale()
+            return self.send_json({**r, "fetched_at": self.app.food.status()["fetched_at"]})
         if method == "POST" and p == "signup":
             return self.api_signup()
         if method == "POST" and p == "login":
             return self.api_login()
         if method == "POST" and p == "logout":
             s.drop_session(self.token())
-            return self.send_json({"ok": True}, headers={"Set-Cookie": "sid=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict"})
+            return self.send_json({"ok": True}, headers={"Set-Cookie": self.cookie("", 0)})
+        if ONLINE:
+            self.app.food.sync_from_store()
 
         u = self.user()
         if p == "me" and method == "GET":
@@ -352,10 +367,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.api_update_item(item)
             if method == "DELETE":
                 if item["photo_path"]:
-                    try:
-                        os.remove(os.path.join(DATA, item["photo_path"]))
-                    except OSError:
-                        pass
+                    s.photo_delete(item)
                 s.delete_item(item["id"])
                 return self.send_json({"ok": True})
         return self.fail("없는 주소입니다", 404)
@@ -395,8 +407,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def login_ok(self, uid):
         token = self.app.store.new_session(uid)
-        cookie = f"sid={token}; Path=/; Max-Age={60 * 60 * 24 * 30}; HttpOnly; SameSite=Strict"
-        return self.send_json({"ok": True}, headers={"Set-Cookie": cookie})
+        return self.send_json({"ok": True}, headers={"Set-Cookie": self.cookie(token, 60 * 60 * 24 * 30)})
 
     def api_settings(self, u):
         b = self.body_json()
@@ -458,15 +469,12 @@ class Handler(BaseHTTPRequestHandler):
     def api_photo(self, method, item):
         s = self.app.store
         if method == "GET":
-            if not item["photo_path"]:
+            got = s.photo_get(item) if item["photo_path"] else None
+            if not got:
                 return self.fail("사진이 없습니다", 404)
-            full = os.path.join(DATA, item["photo_path"])
-            if not os.path.isfile(full):
-                return self.fail("사진이 없습니다", 404)
-            with open(full, "rb") as f:
-                data = f.read()
+            data, ctype = got
             self.send_response(200)
-            self.send_header("Content-Type", mimetypes.guess_type(full)[0] or "image/jpeg")
+            self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(data)))
             self.send_header("Cache-Control", "no-store")
             self.end_headers()
@@ -478,28 +486,13 @@ class Handler(BaseHTTPRequestHandler):
             if not ext:
                 return self.fail("JPG·PNG·WEBP 사진만 올릴 수 있습니다")
             n = int(self.headers.get("Content-Length") or 0)
-            if not 0 < n <= 15_000_000:
-                return self.fail("사진은 15MB 이하만 올릴 수 있습니다")
-            data = self.rfile.read(n)
-            folder = os.path.join(PHOTOS, str(item["inspection_id"]))
-            os.makedirs(folder, exist_ok=True)
-            if item["photo_path"]:
-                try:
-                    os.remove(os.path.join(DATA, item["photo_path"]))
-                except OSError:
-                    pass
-            rel = os.path.join("photos", str(item["inspection_id"]), f"{item['id']}.{ext}")
-            with open(os.path.join(DATA, rel), "wb") as f:
-                f.write(data)
-            s.update_item(item["id"], {"photo_path": rel})
+            if not 0 < n <= MAX_PHOTO:
+                return self.fail(f"사진은 {MAX_PHOTO // 1_000_000}MB 이하만 올릴 수 있습니다")
+            s.photo_put(item, self.rfile.read(n), ctype, ext)
             return self.send_json({"ok": True})
         if method == "DELETE":
             if item["photo_path"]:
-                try:
-                    os.remove(os.path.join(DATA, item["photo_path"]))
-                except OSError:
-                    pass
-                s.update_item(item["id"], {"photo_path": ""})
+                s.photo_delete(item)
             return self.send_json({"ok": True})
         return self.fail("없는 주소입니다", 404)
 
@@ -518,6 +511,17 @@ class Handler(BaseHTTPRequestHandler):
         i = int(self.query.get("i", 0))
         if svc not in ("I0490", "I2715") or not re.fullmatch(r"[\w\-]{1,40}", seq) or not 0 <= i < 5:
             return self.fail("사진이 없습니다", 404)
+        if ONLINE:
+            # 원본 사진이 수 MB라 Vercel 응답 한도(4.5MB)를 넘을 수 있음 → 브라우저가 식품안전나라에서 바로 받게 함
+            url = self.app.food.image_url(svc, seq, i)
+            if not url:
+                return self.fail("사진이 없습니다", 404)
+            self.send_response(302)
+            self.send_header("Location", url)
+            self.send_header("Cache-Control", "public, max-age=86400")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
         folder = os.path.join(DATA, "img_cache")
         base = os.path.join(folder, f"{svc}_{seq}_{i}")
         for ext, ctype in IMAGE_EXT.items():

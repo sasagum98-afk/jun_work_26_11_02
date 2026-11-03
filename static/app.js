@@ -35,8 +35,26 @@ const state = {
 
 /* ------------------------------------------------------------ 공통 */
 
+const IS_LOCAL = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
+
+/* 큰 사진은 올리기 전에 줄임 (긴 쪽 1600px JPEG). 온라인판은 한 번에 4MB까지만 받음 */
+async function shrinkImage(blob) {
+  if (!blob.type.startsWith("image/") || blob.size < 1_500_000) return blob;
+  try {
+    const img = await loadImage(blob);
+    const scale = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight));
+    const c = document.createElement("canvas");
+    c.width = Math.round(img.naturalWidth * scale);
+    c.height = Math.round(img.naturalHeight * scale);
+    c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+    const out = await new Promise((ok) => c.toBlob(ok, "image/jpeg", 0.85));
+    return out && out.size < blob.size ? out : blob;
+  } catch { return blob; }
+}
+
 async function api(method, path, body, raw) {
   const opt = { method, headers: {} };
+  if (raw) raw = await shrinkImage(raw);
   if (raw) {
     opt.body = raw;
     opt.headers["Content-Type"] = raw.type || "application/octet-stream";
@@ -48,7 +66,8 @@ async function api(method, path, body, raw) {
   try {
     res = await fetch("/api/" + path, opt);
   } catch {
-    throw new Error("프로그램과 연결되지 않습니다. 실행.cmd 창이 켜져 있는지 확인하세요.");
+    throw new Error(IS_LOCAL ? "프로그램과 연결되지 않습니다. 실행.cmd 창이 켜져 있는지 확인하세요."
+      : "서버와 연결되지 않습니다. 인터넷 연결을 확인하고 다시 시도하세요.");
   }
   const data = await res.json().catch(() => ({}));
   if (res.status === 401 && path !== "login") {
@@ -366,12 +385,18 @@ function render() {
 }
 
 let lastFetched = "";
+let cronAsked = false;
 async function pollStatus() {
   if (state.me) {
     try {
       state.status = await api("GET", "status");
       const line = $("#status-line");
       if (line) line.innerHTML = statusText(state.status);
+      // 온라인판은 늘 켜진 서버가 없어 1시간이 지나면 화면이 갱신을 부탁함 (서버가 1시간 넘었을 때만 실제로 받음)
+      if (!IS_LOCAL && state.status.stale && !cronAsked) {
+        cronAsked = true;
+        fetch("/api/cron").catch(() => {}).finally(() => { cronAsked = false; setTimeout(pollStatus, 1000); });
+      }
       const stamp = state.status.fetched_at + "|" + state.status.error_kind;
       if (stamp !== lastFetched) {
         lastFetched = stamp;
@@ -1600,7 +1625,7 @@ async function renderDataStatus() {
     <div class="status-line" id="status-line">${statusText(st)}</div>
     <table class="list"><thead><tr><th>자료</th><th>건수</th><th>받은 시각</th></tr></thead>
       <tbody>${Object.keys(st.counts).map((k) => `<tr><td>${esc(st.labels[k])}</td><td>${st.counts[k].toLocaleString()}건</td><td>${esc(st.per_service[k] || "-")}</td></tr>`).join("")}</tbody></table>
-    <p class="muted small">마지막 시도: ${esc(st.last_attempt || "-")} · I2640(농산물)은 I2620에 모두 들어 있어 따로 받지 않습니다. 인증키는 프로그램 폴더의 .env 파일에만 있습니다.</p>
+    <p class="muted small">마지막 시도: ${esc(st.last_attempt || "-")} · I2640(농산물)은 I2620에 모두 들어 있어 따로 받지 않습니다. 인증키는 ${IS_LOCAL ? "프로그램 폴더의 .env 파일" : "서버 설정(환경 변수)"}에만 있습니다.</p>
     <div><button class="btn primary" id="refresh-now" ${st.refreshing ? "disabled" : ""}>${st.refreshing ? "자료 받는 중…" : "지금 자료 다시 받기"}</button></div>`;
   $("#refresh-now").onclick = async (e) => {
     e.target.disabled = true;
