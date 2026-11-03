@@ -66,8 +66,23 @@ a { color: var(--g2); }
 .topart img { display: block; width: 100%; border-radius: 12px; border: 2px solid #fff; box-shadow: 0 2px 8px rgba(44, 56, 30, 0.15); object-fit: cover; }
 .topart .b-truck { height: 200px; }
 .topart .b-cat { height: 200px; object-position: center 20%; }
-.b-text { display: flex; flex-direction: column; gap: 6px; color: var(--navy-dark); }
+.b-text { display: flex; flex-direction: column; gap: 6px; color: var(--navy-dark); min-width: 0; }
 .b-text b { font-size: 1.3rem; }
+/* 문구가 오른쪽에서 왼쪽으로 계속 흐름. 같은 문구 6번 중 앞 3번만큼(-50%) 움직이면 처음과 같은 모습이라 끊김 없이 이어짐 */
+.ticker {
+  overflow: hidden; white-space: nowrap; padding: 8px 0;
+  border-top: 2px solid var(--accent); border-bottom: 2px solid var(--accent);
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+}
+.ticker-track { display: inline-flex; animation: ticker 22s linear infinite; }
+.ticker-track b { padding-right: 2.5em; }
+.ticker-track b::before { content: "🥕 "; }
+.ticker:hover .ticker-track { animation-play-state: paused; }
+@keyframes ticker { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+@media (prefers-reduced-motion: reduce) {
+  .ticker-track { animation: none; }
+}
 .b-text span { font-size: 0.85rem; color: var(--ink-2); }
 @media (max-width: 760px) {
   .topart-in { grid-template-columns: 1.6fr 1fr; gap: 10px; }
@@ -170,6 +185,7 @@ video.cam { width: 100%; max-width: 520px; border-radius: 8px; background: #000;
 .shoot img.cam { width: 100%; max-width: 520px; border-radius: 8px; border: 1px solid var(--line); background: #fff; object-fit: contain; max-height: 390px; }
 .big-shot { min-width: 160px; font-size: 1.05rem; }
 .file-alt { cursor: pointer; }
+.warn-note { margin: 0; padding: 10px 12px; border-radius: 8px; background: var(--warn-soft); color: var(--warn); }
 .preview-img { max-width: 260px; max-height: 200px; border-radius: 8px; border: 1px solid var(--line); }
 .progress { font-weight: 700; color: var(--navy); }
 

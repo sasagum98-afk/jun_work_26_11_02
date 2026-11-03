@@ -89,21 +89,91 @@ function prefSet(k, v) {
 
 const TTS_OK = "speechSynthesis" in window;
 let warnedVoice = false;
+
+/* 음성 고르기: 사람 목소리에 가까운 순서로 고름.
+   Edge의 'Natural' 온라인 음성 > Chrome의 'Google 한국의' > 그 밖의 한국어 음성 > Windows 기본(Heami, 기계음에 가까움) */
+function koVoices() {
+  if (!TTS_OK) return [];
+  const score = (v) => (/natural/i.test(v.name) ? 0 : /online/i.test(v.name) ? 1 : /google/i.test(v.name) ? 2 : /heami/i.test(v.name) ? 4 : 3);
+  return speechSynthesis.getVoices().filter((v) => /^ko/i.test(v.lang)).sort((a, b) => score(a) - score(b));
+}
+function pickVoice() {
+  const list = koVoices();
+  let saved = "";
+  try { saved = localStorage.getItem("ttsVoice") || ""; } catch { /* 무시 */ }
+  return list.find((v) => v.name === saved) || list[0] || null;
+}
+function ttsRate() {
+  let r = 1;
+  try { r = parseFloat(localStorage.getItem("ttsRate")) || 1; } catch { /* 무시 */ }
+  return r;
+}
+if (TTS_OK) speechSynthesis.getVoices(); // 음성 목록은 늦게 채워지므로 미리 불러 둠
+
+/* 기호·단위·날짜를 소리 내어 읽기 좋은 말로 바꿈 */
+function smoothText(s) {
+  return String(s || "")
+    .replace(/(\d{4})[-.](\d{1,2})[-.](\d{1,2})/g, (_, y, m, d) => `${+y}년 ${+m}월 ${+d}일`)
+    .replace(/㈜|\(주\)/g, "주식회사 ")
+    .replace(/mg\/kg/gi, "밀리그램 퍼 킬로그램")
+    .replace(/(\d)\s*kg\b/gi, "$1킬로그램").replace(/(\d)\s*g\b/gi, "$1그램")
+    .replace(/(\d)\s*ml\b/gi, "$1밀리리터").replace(/(\d)\s*L\b/g, "$1리터")
+    .replace(/\s*[·∙•]\s*/g, ", ")
+    .replace(/\s\/\s/g, ", ")
+    .replace(/[()[\]{}「」『』<>]/g, ", ")
+    .replace(/[*#_~]/g, " ")
+    .replace(/\s*,(\s*,)+/g, ",")
+    .replace(/\s*,\s*([.!?])/g, "$1")
+    .replace(/\s+/g, " ")
+    .replace(/\s+([,.])/g, "$1")
+    .replace(/^[,\s]+|[,\s]+$/g, "")
+    .trim();
+}
+
+/* 문장 단위로 나눠 차례로 읽음. 한 번에 길게 읽히면 억양이 단조롭고 Chrome에서 중간에 끊기기도 함 */
+function splitSentences(text) {
+  const raw = text.split(/(?<=[.!?。])\s+/).map((t) => t.trim()).filter(Boolean)
+    .flatMap((t) => (t.length > 160 ? t.split(/(?<=,)\s+/) : [t]));
+  // "1번.", "리얼망고바."처럼 짧은 조각은 다음 문장과 붙여 읽어야 뚝뚝 끊기지 않음
+  const out = [];
+  let buf = "";
+  for (const t of raw) {
+    buf = buf ? `${buf} ${t}` : t;
+    if (buf.length >= 25) { out.push(buf); buf = ""; }
+  }
+  if (buf) out.push(buf);
+  return out;
+}
+
+let speakSeq = 0;
 function speak(text) {
   if (!TTS_OK) return toast("이 브라우저는 읽어 주기를 지원하지 않습니다.");
   speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance(text);
-  u.lang = "ko-KR";
-  u.rate = 0.95;
-  const voice = speechSynthesis.getVoices().find((v) => /^ko/i.test(v.lang));
-  if (voice) u.voice = voice;
-  else if (!warnedVoice && speechSynthesis.getVoices().length) {
+  const seq = ++speakSeq;
+  const voice = pickVoice();
+  if (!voice && !warnedVoice && speechSynthesis.getVoices().length) {
     warnedVoice = true;
     toast("한국어 음성이 없습니다. Windows 설정 > 시간 및 언어 > 음성에서 한국어 음성을 추가하세요.");
   }
-  speechSynthesis.speak(u);
+  const parts = splitSentences(smoothText(text));
+  // 기계음에 가까운 Windows 기본 음성은 조금 천천히, 낮게 읽어야 덜 딱딱하게 들림
+  const plain = !voice || /heami/i.test(voice.name);
+  const next = (i) => {
+    if (seq !== speakSeq || i >= parts.length) return;
+    const u = new SpeechSynthesisUtterance(parts[i]);
+    u.lang = "ko-KR";
+    if (voice) u.voice = voice;
+    u.rate = ttsRate() * (plain ? 0.92 : 1);
+    u.pitch = plain ? 0.95 : 1;
+    // 문장 사이에 짧게 쉼
+    u.onend = () => setTimeout(() => next(i + 1), 180);
+    u.onerror = () => {};
+    speechSynthesis.speak(u);
+  };
+  next(0);
 }
 function stopSpeak() {
+  speakSeq++;
   if (TTS_OK) speechSynthesis.cancel();
 }
 
@@ -116,21 +186,21 @@ function sayDate(d) {
   }).join(", ") + (d.note ? `, ${d.note} 표시` : "");
 }
 
+// 기호 정리는 speak()의 smoothText가 함. 예전 호출부를 위해 이름만 남김
 function sayable(s) {
-  return String(s || "").replace(/\s\/\s/g, ", ").replace(/mg\/kg/g, "밀리그램 퍼 킬로그램").replace(/\*/g, " ");
+  return String(s || "");
 }
 
 function candidateSpeech(r) {
   const g1 = r.source === "I0490" && (r.grade || "").includes("1");
   const parts = [];
-  if (g1) parts.push("주의. 급식에 쓰지 마세요.");
-  parts.push(`${r.source === "I0490" ? r.grade || "등급 없음" : ""} ${CAND_TITLE[r.source]}.`);
-  parts.push(`제품명 ${r.name}.`);
-  if (r.company) parts.push(`업체 ${r.company}.`);
-  if (r.source !== "I2715") parts.push(`제조일자 ${sayDate(r.mfg)}. 소비기한 ${sayDate(r.exp)}.`);
-  if (r.reason) parts.push(`${r.source === "I2715" ? "문제 성분" : "회수 사유"} ${r.reason}.`);
-  if (r.test_item) parts.push(`부적합 항목 ${r.test_item}. 검사결과 ${r.test_result || ""}.`);
-  parts.push(r.source === "I2715" ? "제품명과 제조사를 실물과 대조하세요." : "실물 포장의 날짜와 같은지 확인하세요.");
+  if (g1) parts.push("주의하세요. 이 제품은 급식에 쓰면 안 됩니다.");
+  parts.push(`${r.source === "I0490" && r.grade ? `${r.grade} ` : ""}${CAND_TITLE[r.source]}입니다.`);
+  parts.push(`제품명은 ${r.name}${r.company ? `, 업체는 ${r.company}` : ""}입니다.`);
+  if (r.source !== "I2715") parts.push(`제조일자는 ${sayDate(r.mfg)}, 소비기한은 ${sayDate(r.exp)}입니다.`);
+  if (r.reason) parts.push(`${r.source === "I2715" ? "문제 성분은" : "회수 사유는"} ${r.reason}.`);
+  if (r.test_item) parts.push(`부적합 항목은 ${r.test_item}이고, 검사결과는 ${r.test_result || "자료에 없습니다"}.`);
+  parts.push(r.source === "I2715" ? "제품명과 제조사를 실물과 대조해 주세요." : "실물 포장의 날짜와 같은지 확인해 주세요.");
   return sayable(parts.join(" "));
 }
 
@@ -432,11 +502,12 @@ async function loadBanner() {
     <p class="small muted" style="margin:6px 0 0">항목을 누르면 제품 사진과 날짜를 크게 봅니다.</p>
     <div class="row" style="margin-top:8px;gap:8px">
       ${list.length > 3 ? `<button class="btn small" id="banner-more">${state.bannerOpen ? "접기" : `외 ${list.length - 3}건 더 보기`}</button>` : ""}
-      <button class="btn small" id="banner-read" ${TTS_OK ? "" : "disabled"}>긴급 공지 읽어 주기</button>
+      <button class="btn small" id="banner-read" ${TTS_OK ? "" : "disabled"}>🔊 긴급 공지 소리로 듣기</button>
     </div>
   </div>`;
-  $("#banner-read").onclick = () => speak(sayable(`최근 30일 1등급 회수 공지 ${list.length}건. ` +
-    shown.map((r, i) => `${i + 1}번. ${r.name}, ${r.company}. ${r.reason || ""}.`).join(" ")));
+  $("#banner-read").onclick = () => speak(`최근 30일 동안 1등급 회수 공지가 ${list.length}건 있습니다. ` +
+    shown.map((r, i) => `${i + 1}번. ${r.name}. ${r.company ? `${r.company} 제품입니다. ` : ""}${r.reason ? `회수 사유는 ${r.reason}.` : ""}`).join(" ") +
+    (shown.length < list.length ? ` 나머지 ${list.length - shown.length}건은 더 보기를 누른 뒤 들을 수 있습니다.` : ""));
   $$("[data-bidx]", box).forEach((b) => (b.onclick = () => showDetail(shown[+b.dataset.bidx])));
   const more = $("#banner-more");
   if (more) more.onclick = () => { state.bannerOpen = !state.bannerOpen; loadBanner(); };
@@ -514,8 +585,8 @@ function renderInspectBox() {
       <button class="btn big ${state.method === "manual" ? "on" : ""}" data-method="manual">③ 직접 입력<span>품목명 · 업체명</span></button>
     </div>
     <div class="voice-bar">
-      <label><input type="checkbox" id="auto-read" ${prefGet("autoRead", false) ? "checked" : ""} ${TTS_OK ? "" : "disabled"}> 조회 결과 자동으로 읽어 주기</label>
-      <button class="btn small" id="stop-read" type="button">읽기 멈춤</button>
+      <label><input type="checkbox" id="auto-read" ${prefGet("autoRead", false) ? "checked" : ""} ${TTS_OK ? "" : "disabled"}> 조회 결과 자동으로 소리로 듣기</label>
+      <button class="btn small" id="stop-read" type="button">소리 멈춤</button>
       ${SR ? `<span class="muted small">입력칸 옆 "음성"을 누르면 말로 입력합니다 (인터넷 필요).</span>` : ""}
     </div>
     <div id="method-panel" class="panel"></div>
@@ -922,8 +993,8 @@ function resultsSpeech() {
   if (!s.items.length) return NONE_SPEECH;
   const start = (s.page - 1) * CAND_PAGE;
   const page = s.items.slice(start, start + CAND_PAGE);
-  let t = `문제 후보 ${s.total}건. ` + page.map((r, i) => `${start + i + 1}번. ${candidateSpeech(r)}`).join(" ");
-  if (s.total > start + page.length) t += " 나머지 후보는 화면에서 다음 쪽을 확인하세요.";
+  let t = `문제 후보가 ${s.total}건 있습니다. ` + page.map((r, i) => `${start + i + 1}번. ${candidateSpeech(r)}`).join(" ");
+  if (s.total > start + page.length) t += " 나머지 후보는 화면에서 다음 쪽을 확인해 주세요.";
   return t;
 }
 
@@ -1014,7 +1085,7 @@ function candidateCard(r, idx) {
     <div class="row">
       <button class="btn danger" data-match="${idx}">일치함 → 보고 목록에 담기</button>
       <button class="btn" data-mismatch="${idx}">날짜 다름 → 육안 확인 후 통과 기록</button>
-      <button class="btn ghost" data-say="${idx}" ${TTS_OK ? "" : "disabled"}>이 후보 읽어 주기</button>
+      <button class="btn ghost" data-say="${idx}" ${TTS_OK ? "" : "disabled"}>🔊 소리로 듣기</button>
     </div>
   </article>`;
 }
@@ -1037,7 +1108,7 @@ function renderResults() {
       <div class="row">
         <button class="btn primary" id="pass-none">육안 확인 후 통과 기록</button>
         <button class="btn" id="visual">육안 이상 보고</button>
-        <button class="btn ghost" id="read-results" ${TTS_OK ? "" : "disabled"}>읽어 주기</button>
+        <button class="btn ghost" id="read-results" ${TTS_OK ? "" : "disabled"}>🔊 소리로 듣기</button>
         <button class="btn ghost" id="clear-search">조회 지우기</button>
       </div>
     </div>`;
@@ -1049,7 +1120,7 @@ function renderResults() {
     <div class="stack">
       <div class="row" style="justify-content:space-between">
         <h2 style="color:var(--g1)">문제 후보 ${s.total}건 <span class="muted small" style="font-weight:500">조회: ${esc(what)}</span></h2>
-        <button class="btn small" id="read-results" ${TTS_OK ? "" : "disabled"}>이 쪽 결과 읽어 주기</button>
+        <button class="btn small" id="read-results" ${TTS_OK ? "" : "disabled"}>🔊 이 쪽 결과 소리로 듣기</button>
       </div>
       ${s.total > 1 && s.q ? `<p class="muted small">같은 품목명이 여러 건입니다. 산지·업체·날짜를 함께 확인하세요.</p>` : ""}
       ${page.map((r, i) => candidateCard(r, start + i)).join("")}
@@ -1242,7 +1313,7 @@ async function renderReport() {
       </div>
       <div class="row">
         <button class="btn primary" id="copy-text">문자 내용 복사</button>
-        <button class="btn" id="read-report" ${TTS_OK ? "" : "disabled"}>보고 문구 읽어 주기</button>
+        <button class="btn" id="read-report" ${TTS_OK ? "" : "disabled"}>🔊 보고 문구 소리로 듣기</button>
         <button class="btn" id="pdf">PDF 보고서</button>
         <button class="btn" id="mark-reported">${ins.reported ? "보고 완료 다시 기록" : "보고 완료로 기록"}</button>
       </div>
@@ -1468,8 +1539,10 @@ async function renderSettings() {
       </div>`).join("")}
       <div class="row" style="justify-content:flex-end"><button class="btn primary" type="submit">저장</button></div>
     </form>
+    <div class="card stack" id="voice-set"></div>
     <div class="card stack" id="data-status"></div>
   </section>`;
+  renderVoiceSettings();
   $("#set-form").onsubmit = async (e) => {
     e.preventDefault();
     const f = new FormData(e.target);
@@ -1483,6 +1556,34 @@ async function renderSettings() {
     } catch (err) { toast(err.message); }
   };
   renderDataStatus();
+}
+
+/* 읽어 주기 목소리·빠르기. 이 PC의 브라우저에만 저장 */
+function renderVoiceSettings() {
+  const box = $("#voice-set");
+  if (!box) return;
+  const list = koVoices();
+  const cur = pickVoice();
+  const rate = ttsRate();
+  const label = (v) => `${v.name.replace(/^Microsoft\s+/, "").replace(/\s*-\s*Korean.*$/, "").replace(/\s*\(Korean.*$/, "")}${/natural|online|google/i.test(v.name) ? " · 자연스러움" : /heami/i.test(v.name) ? " · 기본(기계음)" : ""}`;
+  const onlyPlain = !list.some((v) => !/heami/i.test(v.name));
+  box.innerHTML = `
+    <h2>읽어 주기 목소리</h2>
+    ${!TTS_OK ? `<p class="muted">이 브라우저는 읽어 주기를 지원하지 않습니다.</p>` : `
+    <div class="row">
+      <label class="field grow">목소리<select id="tts-voice">${list.length ? list.map((v) => `<option value="${esc(v.name)}" ${cur && v.name === cur.name ? "selected" : ""}>${esc(label(v))}</option>`).join("") : `<option>한국어 음성 없음</option>`}</select></label>
+      <label class="field">빠르기<select id="tts-rate">
+        ${[[0.85, "천천히"], [1, "보통"], [1.15, "조금 빠르게"]].map(([v, t]) => `<option value="${v}" ${Math.abs(v - rate) < 0.01 ? "selected" : ""}>${t}</option>`).join("")}
+      </select></label>
+      <button class="btn" id="tts-test" type="button" style="align-self:flex-end">들어 보기</button>
+    </div>
+    ${onlyPlain ? `<p class="small warn-note">지금 이 PC에는 기계음에 가까운 Windows 기본 음성만 있습니다. 더 자연스러운 목소리를 쓰려면 <b>Microsoft Edge</b>로 이 주소를 열거나(자연스러운 '선희·인준' 목소리), <b>Chrome</b>에서 인터넷이 연결된 상태로 쓰세요('Google 한국의' 목소리). 두 목소리 모두 인터넷이 필요합니다.</p>` : `<p class="muted small">'자연스러움' 목소리는 인터넷이 필요합니다. 인터넷이 끊기면 Windows 기본 음성으로 읽습니다.</p>`}`}`;
+  if (!TTS_OK) return;
+  $("#tts-voice").onchange = (e) => { try { localStorage.setItem("ttsVoice", e.target.value); } catch { /* 무시 */ } };
+  $("#tts-rate").onchange = (e) => { try { localStorage.setItem("ttsRate", e.target.value); } catch { /* 무시 */ } };
+  $("#tts-test").onclick = () => speak("안녕하세요. 오늘 들어온 깻잎은 회수 공지가 없습니다. 실물 포장의 소비기한이 2026년 11월 10일인지 확인해 주세요.");
+  // 음성 목록이 늦게 채워지는 브라우저(Chrome)에서는 채워진 뒤 다시 그림
+  if (!list.length || speechSynthesis.onvoiceschanged === null) speechSynthesis.onvoiceschanged = () => { speechSynthesis.onvoiceschanged = () => {}; renderVoiceSettings(); };
 }
 
 async function renderDataStatus() {
