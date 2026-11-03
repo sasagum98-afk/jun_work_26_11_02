@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>식자재 안전 지키미</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="wrap">
+    <div class="brand">군 급식 식자재 안전 지키미<small>베타</small></div>
+    <nav class="nav hidden" id="nav">
+      <a href="#inspect" data-view="inspect">검수</a>
+      <a href="#report" data-view="report">보고</a>
+      <a href="#records" data-view="records">검수 기록</a>
+      <a href="#settings" data-view="settings">설정</a>
+    </nav>
+    <div class="who hidden" id="who"></div>
+  </div>
+</header>
+
+<main class="wrap" id="main">
+  <p class="muted">불러오는 중입니다…</p>
+</main>
+
+<script src="vendor/zxing.min.js"></script>
+<script src="vendor/tesseract/tesseract.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
