@@ -62,11 +62,12 @@ a { color: var(--g2); }
 
 /* 상단 그림 띠 (로그인 후 모든 화면) */
 .topart { background: linear-gradient(90deg, #e3e8cf, var(--accent-soft)); border-bottom: 1px solid var(--line); }
-.topart-in { display: grid; grid-template-columns: 380px 1fr 280px; gap: 20px; align-items: center; padding-top: 14px; padding-bottom: 14px; }
+/* 화면 너비와 상관없이 같은 모양: 위에 그림 두 장 나란히, 그 아래 흐르는 배너가 가로 전체 */
+.topart-in { display: grid; grid-template-columns: 1.6fr 1fr; gap: 16px; align-items: center; padding-top: 14px; padding-bottom: 14px; }
 .topart img { display: block; width: 100%; border-radius: 12px; border: 2px solid #fff; box-shadow: 0 2px 8px rgba(44, 56, 30, 0.15); object-fit: cover; }
-.topart .b-truck { height: 200px; }
-.topart .b-cat { height: 200px; object-position: center 20%; }
-.b-text { display: flex; flex-direction: column; gap: 6px; color: var(--navy-dark); min-width: 0; }
+.topart .b-truck { height: 220px; }
+.topart .b-cat { height: 220px; object-position: center 20%; }
+.b-text { display: flex; flex-direction: column; gap: 6px; color: var(--navy-dark); min-width: 0; grid-column: 1 / -1; grid-row: 2; text-align: center; }
 .b-text b { font-size: 1.3rem; }
 /* 문구가 오른쪽에서 왼쪽으로 계속 흐름. 같은 문구 6번 중 앞 3번만큼(-50%) 움직이면 처음과 같은 모습이라 끊김 없이 이어짐 */
 .ticker {
@@ -85,8 +86,7 @@ a { color: var(--g2); }
 }
 .b-text span { font-size: 0.85rem; color: var(--ink-2); }
 @media (max-width: 760px) {
-  .topart-in { grid-template-columns: 1.6fr 1fr; gap: 10px; }
-  .topart .b-text { grid-column: 1 / -1; grid-row: 2; }
+  .topart-in { gap: 10px; }
   .b-text span { display: none; }
   .topart .b-truck, .topart .b-cat { height: 120px; }
   .b-text b { font-size: 1rem; }
