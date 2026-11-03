@@ -19,14 +19,15 @@
 - 인터넷이 끊기면 마지막 저장본으로 계속 조회합니다.
 - 이 PC(127.0.0.1)에서만 열립니다.
 
-## 온라인판 (Vercel + Supabase)
+## 온라인판 (Vercel + Postgres)
 
 주소: https://gunmeal-safety.vercel.app — GitHub `main`에 올리면 Vercel이 자동으로 다시 배포합니다.
 
 - 화면(`static/`)은 Vercel이 그대로 내주고, `/api/*`는 `api/index.py`가 PC판과 같은 서버 코드(`app/server.py`)로 처리합니다. 설정은 `vercel.json`.
 - Vercel 프로젝트 설정 > Environment Variables에 넣는 값 (화면에서 사용자가 직접 입력)
   - `FOODSAFETY_KEY`: 식품안전나라 인증키
-  - `DATABASE_URL`: Supabase 프로젝트 > Connect > **Transaction pooler** 주소(6543 포트, 비밀번호 포함). 없으면 기록이 서버 임시 공간에만 남아 가끔 지워집니다.
+  - `DATABASE_URL`: Postgres 접속 주소. 지금은 Vercel Storage의 **Neon**(접두어 `DATABASE`)이 자동으로 넣어 줍니다. Supabase를 쓰려면 Connect > Transaction pooler(6543 포트) 주소를 넣습니다. 없으면 기록이 서버 임시 공간에만 남아 가입·로그인이 풀립니다.
+  - 상태 확인: `/api/ping` → `db`가 `postgres`, `foodsafety_key`가 `true`면 정상
 - 자료는 1시간이 지나면 화면이 갱신을 요청하고(`/api/cron`), 하루 한 번 Vercel 예약 작업으로도 받습니다.
 - 제품 사진은 원본이 커서 식품안전나라에서 브라우저가 바로 받습니다. 현장 사진은 올리기 전에 긴 쪽 1600px로 줄입니다.
 - 인터넷에 열린 주소이므로 베타 기간에는 가상 부대 코드·가상 자료만 씁니다.

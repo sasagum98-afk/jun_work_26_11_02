@@ -257,7 +257,10 @@ class Handler(BaseHTTPRequestHandler):
     def route_api(self, method, p):
         s = self.app.store
         if p == "ping":
-            return self.send_json({"app": APP_ID, "online": ONLINE})
+            # 어느 저장소를 쓰는지만 알림 (주소·비밀번호는 내보내지 않음)
+            db = "postgres" if type(s).__name__ == "PgStore" else "sqlite"
+            return self.send_json({"app": APP_ID, "online": ONLINE, "db": db,
+                                   "foodsafety_key": bool(self.app.food.key)})
         if p == "cron":
             # 온라인판 자료 갱신: 1시간이 지났을 때만 실제로 받음 (누가 불러도 그 이상 자주 받지 않음)
             r = self.app.food.refresh_if_stale()
