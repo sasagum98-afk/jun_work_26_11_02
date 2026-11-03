@@ -347,6 +347,13 @@ async function boot() {
     return;
   }
   window.addEventListener("hashchange", render);
+  // 제목을 누르면 처음 화면(검수)으로. 이미 검수 화면이면 맨 위로 올리고 다시 그림
+  $("#home-link").onclick = (e) => {
+    if (view() !== "inspect" || location.hash.slice(1).includes("/")) return;
+    e.preventDefault();
+    render();
+    window.scrollTo(0, 0);
+  };
   render();
   pollStatus();
 }

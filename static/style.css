@@ -53,7 +53,9 @@ a { color: var(--g2); }
 /* 상단 */
 .topbar { background: var(--navy-dark); color: #fff; border-bottom: 4px solid var(--accent); }
 .topbar .wrap { display: flex; align-items: center; gap: 16px; min-height: 68px; flex-wrap: wrap; }
-.brand { font-weight: 800; font-size: 1.05rem; display: flex; align-items: center; gap: 10px; }
+.brand { font-weight: 800; font-size: 1.05rem; display: flex; align-items: center; gap: 10px; color: #fff; text-decoration: none; border-radius: 8px; }
+.brand:hover { opacity: 0.9; }
+.brand:focus-visible { outline: 3px solid #f3c79a; outline-offset: 4px; }
 .brand img { width: 44px; height: 44px; border-radius: 50%; border: 2px solid #f3c79a; object-fit: cover; background: #fff; }
 .brand small {
   font-weight: 700; margin-left: 2px; font-size: 0.65rem; background: var(--accent); color: #fff;
