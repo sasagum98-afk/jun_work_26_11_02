@@ -190,6 +190,11 @@ video.cam { width: 100%; max-width: 520px; border-radius: 8px; background: #000;
 .shoot img.cam { width: 100%; max-width: 520px; border-radius: 8px; border: 1px solid var(--line); background: #fff; object-fit: contain; max-height: 390px; }
 .big-shot { min-width: 160px; font-size: 1.05rem; }
 .file-alt { cursor: pointer; }
+/* 로그인 화면 '체험하기' */
+.demo-box { margin-top: 18px; padding-top: 16px; border-top: 1px dashed var(--line); display: grid; gap: 8px; }
+.big-demo { width: 100%; min-height: 54px; font-size: 1.05rem; font-weight: 800; background: var(--accent); border-color: var(--accent); color: #fff; }
+.big-demo:hover { filter: brightness(1.05); }
+
 /* 보고 화면 맨 아래 '보고하기' */
 .send-bar { display: flex; gap: 16px; align-items: center; justify-content: space-between; flex-wrap: wrap;
   border: 2px solid var(--accent); background: var(--accent-soft); }

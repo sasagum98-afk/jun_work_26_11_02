@@ -9,6 +9,7 @@ import json
 import mimetypes
 import os
 import re
+import secrets
 import sys
 import threading
 import urllib.error
@@ -30,6 +31,7 @@ ONLINE = bool(os.environ.get("VERCEL"))  # Vercel이 넣어 주는 환경 변수
 DATA = os.environ.get("GUNMEAL_DATA_DIR") or ("/tmp/gunmeal" if ONLINE else os.path.join(ROOT, "data"))
 CONFIG = os.path.join(ROOT, "config")
 MAX_PHOTO = 4_000_000 if ONLINE else 15_000_000  # Vercel은 요청 본문 4.5MB까지
+DEMO_UNIT = "A123"  # '체험하기' 계정이 들어가는 가상 부대 (같은 부대 기록은 함께 보임)
 APP_ID = "gunmeal-safety-beta"
 PORTS = range(8765, 8776)
 WEEKDAYS = "월화수목금토일"
@@ -280,6 +282,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.api_signup()
         if method == "POST" and p == "login":
             return self.api_login()
+        if method == "POST" and p == "demo":
+            return self.api_demo()
         if method == "POST" and p == "logout":
             s.drop_session(self.token())
             return self.send_json({"ok": True}, headers={"Set-Cookie": self.cookie("", 0)})
@@ -418,6 +422,15 @@ class Handler(BaseHTTPRequestHandler):
         if not u or not check_password(b.get("password") or "", u["pw_hash"]):
             return self.fail("아이디 또는 비밀번호가 맞지 않습니다", 401)
         return self.login_ok(u["id"])
+
+    def api_demo(self):
+        """가입 없이 체험: 누를 때마다 체험용 부대(DEMO_UNIT)에 새 계정을 만들어 로그인.
+        비밀번호는 아무도 모르는 임의 값이라 이 계정으로 다시 로그인할 수는 없음."""
+        if DEMO_UNIT not in unit_codes():
+            return self.fail("체험용 부대 코드가 등록되어 있지 않습니다", 503)
+        name = f"demo-{secrets.token_hex(4)}"
+        uid = self.app.store.create_user(name, secrets.token_urlsafe(24), "체험", "체험 사용자", DEMO_UNIT)
+        return self.login_ok(uid)
 
     def login_ok(self, uid):
         token = self.app.store.new_session(uid)

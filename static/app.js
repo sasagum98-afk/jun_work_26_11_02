@@ -450,10 +450,28 @@ function renderAuth(tab = "login") {
       <button class="btn primary" type="submit">${tab === "login" ? "로그인" : "가입하고 시작하기"}</button>
       ${tab === "login" ? `<p class="muted small">비밀번호를 잊었다면 PC 관리자가 계정을 지운 뒤 다시 가입합니다 (베타).</p>` : ""}
     </form>
+    <div class="demo-box">
+      <button class="btn big-demo" id="demo-btn" type="button">🚀 가입 없이 체험하기</button>
+      <p class="muted small">체험용 부대 코드 <b>A123</b>의 가상 계정으로 바로 들어갑니다. 직접 가입할 때도 부대 코드에 <b>A123</b>을 넣으면 됩니다. 체험 기록은 같은 부대의 다른 체험자에게도 보이니 실제 정보는 넣지 마세요.</p>
+    </div>
   </div>
   </div>`;
   $$(".tabs button").forEach((b) => (b.onclick = () => renderAuth(b.dataset.tab)));
   $("#auth-form [name=username]").focus();
+  $("#demo-btn").onclick = async (e) => {
+    e.target.disabled = true;
+    try {
+      await api("POST", "demo", {});
+      state.me = await api("GET", "me");
+      location.hash = "inspect";
+      render();
+      pollNow();
+      toast("체험 계정(부대 코드 A123)으로 들어왔습니다. 바코드·품목명으로 조회해 보세요.");
+    } catch (err) {
+      $("#auth-err").textContent = err.message;
+      e.target.disabled = false;
+    }
+  };
   $("#auth-form").onsubmit = async (e) => {
     e.preventDefault();
     const body = Object.fromEntries(new FormData(e.target));
