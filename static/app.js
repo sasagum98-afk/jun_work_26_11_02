@@ -510,7 +510,7 @@ function renderInspectBox() {
     </div>
     <div class="methods" role="group" aria-label="확인 방법">
       <button class="btn big ${state.method === "barcode" ? "on" : ""}" data-method="barcode">① 바코드<span>웹캠 · 사진 파일 · 숫자 입력</span></button>
-      <button class="btn big ${state.method === "ocr" ? "on" : ""}" data-method="ocr">② 사진 글자 인식<span>포장지 사진 → 글자 채우기</span></button>
+      <button class="btn big ${state.method === "ocr" ? "on" : ""}" data-method="ocr">② 촬영 글자 인식<span>웹캠으로 포장지 찍기 → 글자 채우기</span></button>
       <button class="btn big ${state.method === "manual" ? "on" : ""}" data-method="manual">③ 직접 입력<span>품목명 · 업체명</span></button>
     </div>
     <div class="voice-bar">
@@ -598,17 +598,19 @@ function renderMethodPanel(focus) {
     };
     if (focus) $("#bc-input").focus();
   } else if (state.method === "ocr") {
+    // 사진 글자 인식은 웹캠 촬영이 기본. 사진 파일은 웹캠이 없을 때만 쓰는 예비 수단
     p.innerHTML = `
     <div class="stack">
-      <div class="row">
-        <button class="btn" id="ocr-cam" type="button">웹캠으로 찍기</button>
-        <label class="btn">포장지 사진 올리기<input type="file" accept="image/*" id="ocr-file" class="hidden"></label>
-        <span class="muted small">제품명이 크게 보이도록 찍은 사진이 잘 읽힙니다.</span>
+      <div class="shoot">
+        <video id="ocr-cam" class="cam hidden" autoplay muted playsinline></video>
+        <img id="ocr-img" class="cam hidden" alt="찍은 포장지 사진">
+        <div class="row">
+          <button class="btn primary big-shot" id="ocr-shot" type="button">웹캠 켜기</button>
+          <span class="muted small" id="ocr-tip">제품명이 화면에 크게, 흔들리지 않게 보이도록 비추세요.</span>
+        </div>
+        <label class="small muted file-alt">웹캠이 없으면 <u>사진 파일로 대신 올리기</u><input type="file" accept="image/*" id="ocr-file" class="hidden"></label>
       </div>
-      <div class="row" style="align-items:flex-start">
-        <img id="ocr-img" class="preview-img hidden" alt="올린 포장지 사진">
-        <label class="field grow">인식한 글자 (고쳐서 쓰세요)<textarea id="ocr-text" placeholder="사진을 올리면 읽은 글자가 여기에 채워집니다"></textarea></label>
-      </div>
+      <label class="field">인식한 글자 (고쳐서 쓰세요)<textarea id="ocr-text" placeholder="사진을 찍으면 읽은 글자가 여기에 채워집니다"></textarea></label>
       <p id="ocr-msg" class="progress" role="status"></p>
       <form id="ocr-form" class="row">
         <label class="field grow">품목명${withMic(`<input type="text" id="ocr-q" name="q">`, "ocr-q")}</label>
@@ -617,11 +619,13 @@ function renderMethodPanel(focus) {
       </form>
       <p class="muted small">글자 인식은 틀릴 수 있습니다. 품목명을 실물과 대조해 고친 뒤 조회하세요.</p>
     </div>`;
-    $("#ocr-file").onchange = (e) => e.target.files[0] && runOcr(e.target.files[0]);
-    $("#ocr-cam").onclick = async () => {
-      const f = await captureFromCamera("포장지 찍기");
-      if (f) runOcr(f);
+    $("#ocr-file").onchange = (e) => {
+      if (!e.target.files[0]) return;
+      stopCamera();
+      runOcr(e.target.files[0]);
     };
+    $("#ocr-shot").onclick = () => (ocrStream ? ocrShoot() : ocrCameraOn());
+    if (focus) ocrCameraOn();
     $("#ocr-form").onsubmit = (e) => {
       e.preventDefault();
       const q = $("#ocr-q").value.trim();
@@ -660,6 +664,10 @@ function stopCamera() {
   if (reader) {
     try { reader.reset(); } catch { /* 무시 */ }
     reader = null;
+  }
+  if (ocrStream) {
+    ocrStream.getTracks().forEach((t) => t.stop());
+    ocrStream = null;
   }
 }
 
@@ -817,11 +825,57 @@ function bestLine(text) {
   return good[0].l.slice(0, 60);
 }
 
+/* 글자 인식용 웹캠: 패널 안에서 바로 보여 주고, 찍으면 그 사진으로 글자를 읽음 */
+let ocrStream = null;
+async function ocrCameraOn() {
+  const video = $("#ocr-cam");
+  const btn = $("#ocr-shot");
+  const msg = $("#ocr-msg");
+  if (!video) return;
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    msg.textContent = "이 브라우저에서는 웹캠을 쓸 수 없습니다. 사진 파일로 대신 올리세요.";
+    return;
+  }
+  btn.disabled = true;
+  msg.textContent = "웹캠을 켜는 중입니다…";
+  try {
+    const s = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1920 }, height: { ideal: 1080 } } });
+    if (!$("#ocr-cam")) return s.getTracks().forEach((t) => t.stop()); // 그사이 다른 화면으로 옮김
+    stopCamera();
+    ocrStream = s;
+    video.srcObject = s;
+    video.classList.remove("hidden");
+    $("#ocr-img").classList.add("hidden");
+    btn.textContent = "찍기";
+    msg.textContent = "포장지가 크게 보이면 '찍기'를 누르세요.";
+    btn.focus();
+  } catch {
+    msg.textContent = "웹캠을 켤 수 없습니다. 웹캠 연결과 브라우저의 카메라 허용을 확인하거나, 사진 파일로 대신 올리세요.";
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function ocrShoot() {
+  const video = $("#ocr-cam");
+  if (!video || !video.videoWidth) return;
+  const c = document.createElement("canvas");
+  c.width = video.videoWidth;
+  c.height = video.videoHeight;
+  c.getContext("2d").drawImage(video, 0, 0);
+  stopCamera();
+  video.classList.add("hidden");
+  $("#ocr-shot").textContent = "다시 찍기";
+  c.toBlob((b) => b && runOcr(new File([b], "webcam.jpg", { type: "image/jpeg" })), "image/jpeg", 0.92);
+}
+
 async function runOcr(file) {
   const msg = $("#ocr-msg");
   const img = $("#ocr-img");
+  if (!img) return;
   img.src = URL.createObjectURL(file);
   img.classList.remove("hidden");
+  $("#ocr-shot").textContent = "다시 찍기";
   msg.textContent = "글자를 읽는 중입니다… (처음 한 번은 인식 자료를 불러오느라 오래 걸릴 수 있습니다)";
   if (typeof Tesseract === "undefined") return (msg.textContent = "글자 인식 기능을 불러오지 못했습니다. 직접 입력을 쓰세요.");
   ocrProgress = (m) => {
