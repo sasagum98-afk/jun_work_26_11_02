@@ -275,10 +275,12 @@ function render() {
   if (!state.me) {
     nav.classList.add("hidden");
     who.classList.add("hidden");
+    $("#topart").classList.add("hidden");
     return renderAuth();
   }
   nav.classList.remove("hidden");
   who.classList.remove("hidden");
+  $("#topart").classList.remove("hidden");
   const u = state.me.user;
   who.innerHTML = `${esc(u.unit_code)} · ${esc(u.rank)} ${esc(u.name)} <button class="btn small ghost" id="logout" style="color:#fff;border-color:rgba(255,255,255,.4)">로그아웃</button>`;
   $("#logout").onclick = async () => {
@@ -505,7 +507,6 @@ function renderInspectBox() {
     </div>
       <div class="counter" aria-live="polite"><div>통과 <b>${pass}</b>건</div><div style="background:var(--g1-soft);color:var(--g1)">이상 <b>${issue}</b>건</div></div>
     </div>
-    <div class="hero-art"><img src="img/inspector.jpg" alt="당근을 들고 검수표를 확인하는 고양이 급식 감독관 그림"></div>
     </div>
     <div class="methods" role="group" aria-label="확인 방법">
       <button class="btn big ${state.method === "barcode" ? "on" : ""}" data-method="barcode">① 바코드<span>웹캠 · 사진 파일 · 숫자 입력</span></button>

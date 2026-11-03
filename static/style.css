@@ -60,16 +60,29 @@ a { color: var(--g2); }
   padding: 2px 8px; border-radius: 999px; letter-spacing: 0.02em;
 }
 
+/* 상단 그림 띠 (로그인 후 모든 화면) */
+.topart { background: linear-gradient(90deg, #e3e8cf, var(--accent-soft)); border-bottom: 1px solid var(--line); }
+.topart-in { display: grid; grid-template-columns: 380px 1fr 280px; gap: 20px; align-items: center; padding-top: 14px; padding-bottom: 14px; }
+.topart img { display: block; width: 100%; border-radius: 12px; border: 2px solid #fff; box-shadow: 0 2px 8px rgba(44, 56, 30, 0.15); object-fit: cover; }
+.topart .b-truck { height: 200px; }
+.topart .b-cat { height: 200px; object-position: center 20%; }
+.b-text { display: flex; flex-direction: column; gap: 6px; color: var(--navy-dark); }
+.b-text b { font-size: 1.3rem; }
+.b-text span { font-size: 0.85rem; color: var(--ink-2); }
+@media (max-width: 760px) {
+  .topart-in { grid-template-columns: 1.6fr 1fr; gap: 10px; }
+  .topart .b-text { grid-column: 1 / -1; grid-row: 2; }
+  .b-text span { display: none; }
+  .topart .b-truck, .topart .b-cat { height: 120px; }
+  .b-text b { font-size: 1rem; }
+}
+
 /* 그림 영역 */
-.hero { display: grid; grid-template-columns: 1fr 260px; gap: 20px; align-items: stretch; }
-.hero-art { border-radius: 12px; overflow: hidden; border: 1px solid var(--line); background: var(--accent-soft); min-height: 200px; }
-.hero-art img { width: 100%; height: 100%; object-fit: cover; object-position: center 20%; display: block; }
+.hero { display: block; }
 .empty-art { display: grid; grid-template-columns: 200px 1fr; gap: 20px; align-items: center; }
 .empty-art img { width: 100%; border-radius: 12px; border: 1px solid var(--line); display: block; }
 .art-credit { font-size: 0.7rem; color: var(--ink-3); }
 @media (max-width: 760px) {
-  .hero { grid-template-columns: 1fr; }
-  .hero-art { display: none; }
   .empty-art { grid-template-columns: 1fr; }
   .empty-art img { max-width: 220px; }
 }
