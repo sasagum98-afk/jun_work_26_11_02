@@ -318,7 +318,15 @@ async function pollStatus() {
 
 function renderAuth(tab = "login") {
   $("#main").innerHTML = `
-  <div class="card auth">
+  <div class="auth-wrap">
+  <div class="auth-art" role="img" aria-label="식자재를 싣고 부대로 들어오는 납품 트럭 그림">
+    <div class="caption">
+      <h1>오늘 들어온 식자재, 한 번에 확인</h1>
+      <p>바코드 한 번, 품목명 한 줄로 회수·부적합 이력을 확인하고 이상 품목은 묶어서 보고합니다.</p>
+    </div>
+  </div>
+  <div class="auth">
+    <div class="auth-title"><img src="img/face.jpg" alt=""><div><h2>식자재 안전 지키미</h2><div class="muted small">급식 감독관용 검수 도구 (베타)</div></div></div>
     <div class="tabs" role="tablist">
       <button role="tab" data-tab="login" class="${tab === "login" ? "on" : ""}">로그인</button>
       <button role="tab" data-tab="signup" class="${tab === "signup" ? "on" : ""}">가입</button>
@@ -338,6 +346,7 @@ function renderAuth(tab = "login") {
       <button class="btn primary" type="submit">${tab === "login" ? "로그인" : "가입하고 시작하기"}</button>
       ${tab === "login" ? `<p class="muted small">비밀번호를 잊었다면 PC 관리자가 계정을 지운 뒤 다시 가입합니다 (베타).</p>` : ""}
     </form>
+  </div>
   </div>`;
   $$(".tabs button").forEach((b) => (b.onclick = () => renderAuth(b.dataset.tab)));
   $("#auth-form [name=username]").focus();
@@ -481,7 +490,9 @@ function renderInspectBox() {
   const issue = items.filter((i) => i.result === "issue").length;
   box.innerHTML = `
   <div class="card stack">
-    <div class="row" style="justify-content:space-between">
+    <div class="hero">
+    <div class="stack">
+    <div class="row" style="justify-content:space-between;align-items:flex-start">
       <div class="grow">
         ${ins ? `<h2>검수 중 · ${esc(ins.vendor)} <button class="btn small ghost" id="vendor-edit" type="button">납품업체 바꾸기</button></h2>
           <div class="muted small">시작 ${esc(ins.started_at.slice(0, 16))} · 회차 ${ins.id}</div>`
@@ -491,7 +502,10 @@ function renderInspectBox() {
           <datalist id="vendors"></datalist>
           <div class="muted small" style="margin-top:4px">아래에서 바로 조회하세요. 첫 품목을 기록하면 검수 회차가 자동으로 시작됩니다.</div>`}
       </div>
+    </div>
       <div class="counter" aria-live="polite"><div>통과 <b>${pass}</b>건</div><div style="background:var(--g1-soft);color:var(--g1)">이상 <b>${issue}</b>건</div></div>
+    </div>
+    <div class="hero-art"><img src="img/inspector.jpg" alt="당근을 들고 검수표를 확인하는 고양이 급식 감독관 그림"></div>
     </div>
     <div class="methods" role="group" aria-label="확인 방법">
       <button class="btn big ${state.method === "barcode" ? "on" : ""}" data-method="barcode">① 바코드<span>웹캠 · 사진 파일 · 숫자 입력</span></button>
@@ -1140,8 +1154,9 @@ async function renderReport() {
     return;
   }
   if (!data || !data.inspection) {
-    main.innerHTML = `<div class="card stack"><h2>보고 목록</h2><p>진행 중인 검수가 없습니다. 검수 화면에서 검수를 시작하거나, 검수 기록에서 지난 회차를 여세요.</p>
-      <div class="row"><a class="btn primary" href="#inspect">검수 화면으로</a><a class="btn" href="#records">검수 기록</a></div></div>`;
+    main.innerHTML = `<div class="card empty-art"><img src="img/inspector.jpg" alt="검수표를 든 고양이 급식 감독관 그림">
+      <div class="stack"><h2>보고 목록</h2><p>진행 중인 검수가 없습니다. 검수 화면에서 품목을 조회해 기록하거나, 검수 기록에서 지난 회차를 여세요.</p>
+      <div class="row"><a class="btn primary" href="#inspect">검수 화면으로</a><a class="btn" href="#records">검수 기록</a></div></div></div>`;
     return;
   }
   const ins = data.inspection;
@@ -1323,7 +1338,9 @@ async function renderRecords() {
           <td>${esc(i.started_at.slice(0, 16))}</td><td>${esc(i.vendor)}</td><td>${esc(i.author)}</td>
           <td>${i.pass_count}건</td><td>${i.issue_count ? `<b style="color:var(--g1)">${i.issue_count}건</b>` : "0건"}</td>
           <td>${i.reported ? `<span class="badge pass">보고 ${esc((i.reported_at || "").slice(5, 16))}</span>` : i.issue_count ? `<span class="badge issue">보고 전</span>` : "-"}</td></tr>`).join("")}</tbody>
-      </table></div>` : `<p class="muted">아직 검수 기록이 없습니다.</p>`}
+      </table></div>` : `<div class="empty-art"><img src="img/truck.jpg" alt="식자재를 싣고 오는 납품 트럭 그림">
+        <div class="stack"><p>아직 검수 기록이 없습니다. 납품 차량이 들어오면 검수 화면에서 품목을 조회해 기록하세요.</p>
+        <div><a class="btn primary" href="#inspect">검수 화면으로</a></div></div></div>`}
     </div>
     <div id="record-detail"></div>
   </section>`;
