@@ -190,6 +190,13 @@ video.cam { width: 100%; max-width: 520px; border-radius: 8px; background: #000;
 .shoot img.cam { width: 100%; max-width: 520px; border-radius: 8px; border: 1px solid var(--line); background: #fff; object-fit: contain; max-height: 390px; }
 .big-shot { min-width: 160px; font-size: 1.05rem; }
 .file-alt { cursor: pointer; }
+/* 보고 화면 맨 아래 '보고하기' */
+.send-bar { display: flex; gap: 16px; align-items: center; justify-content: space-between; flex-wrap: wrap;
+  border: 2px solid var(--accent); background: var(--accent-soft); }
+.big-send { font-size: 1.1rem; padding: 14px 28px; min-height: 56px; }
+.send-to { display: grid; gap: 6px; margin-top: 6px; }
+.send-to label { display: flex; gap: 8px; align-items: center; }
+.send-ways { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
 .warn-note { margin: 0; padding: 10px 12px; border-radius: 8px; background: var(--warn-soft); color: var(--warn); }
 .preview-img { max-width: 260px; max-height: 200px; border-radius: 8px; border: 1px solid var(--line); }
 .progress { font-weight: 700; color: var(--navy); }

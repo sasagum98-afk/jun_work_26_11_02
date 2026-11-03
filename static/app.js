@@ -1356,6 +1356,11 @@ async function renderReport() {
       </div>
       <p class="muted small">PC 메신저(예: PC 카카오톡)나 Windows '휴대폰과 연결'의 문자 창에 붙여 넣어 보내세요. 휴대폰 문자로 보낼 때는 아래 문구를 보고 옮겨 적어도 됩니다.</p>
       <div id="report-text" class="report-text hidden" aria-live="polite"></div>
+    </div>
+    <div class="card send-bar">
+      <div><b>이상 품목 ${issues.length}건을 관리자에게 보고합니다</b>
+        <div class="muted small">받는 사람을 고르고 문자·이메일·공유로 보낸 뒤 '보고 완료'로 기록합니다.</div></div>
+      <button class="btn primary big-send" id="send-report" type="button">📤 보고하기</button>
     </div>` : ""}
   </section>`;
   const list = $("#issue-list");
@@ -1394,7 +1399,92 @@ async function renderReport() {
     toast("보고 시각을 검수 기록에 남겼습니다.");
     renderReport();
   };
+  $("#send-report").onclick = () => sendReportDialog(ins, managers);
   void u;
+}
+
+/* 보고하기: 받는 사람 고르기 → 문자·이메일·공유·복사로 보내기 → 보고 완료 기록 */
+async function sendReportDialog(ins, managers) {
+  let r;
+  try {
+    r = await api("GET", `inspections/${ins.id}/report`);
+  } catch (e) { return toast(e.message); }
+  const pdfUrl = `${location.origin}/report?id=${ins.id}`;
+  const canShare = typeof navigator.share === "function";
+  const back = document.createElement("div");
+  back.className = "modal-back";
+  back.innerHTML = `<div class="modal wide" role="dialog" aria-modal="true" aria-label="보고하기">
+    <h2>📤 보고하기 · 이상 품목 ${r.count}건</h2>
+    <div class="stack" style="margin-top:12px">
+      <div><b>① 받는 사람</b>
+        ${managers.length ? `<div class="send-to">${managers.map((m, i) => `
+          <label><input type="checkbox" data-mi="${i}" ${m.phone ? "checked" : ""}> ${esc(m.role)} ${esc(m.name)} <span class="muted">${esc(m.phone || "연락처 없음")}</span></label>`).join("")}</div>`
+        : `<p class="muted small">설정에 관리자가 없습니다. 받는 사람은 보내는 앱에서 직접 고르세요. (<a href="#settings">설정</a>에서 최대 3명 등록)</p>`}
+      </div>
+      <div><b>② 보낼 내용</b>
+        <textarea id="send-body" rows="7" style="margin-top:6px">${esc(r.text)}</textarea>
+        <p class="muted small">고쳐서 보내도 됩니다. 사진·상세는 PDF 보고서로 따로 첨부하세요.</p></div>
+      <div><b>③ 보내는 방법</b>
+        <div class="send-ways">
+          <button class="btn primary" data-way="sms" type="button">💬 문자로 보내기</button>
+          <button class="btn" data-way="mail" type="button">✉️ 이메일로 보내기</button>
+          ${canShare ? `<button class="btn" data-way="share" type="button">🔗 공유 (카카오톡 등)</button>` : ""}
+          <button class="btn" data-way="copy" type="button">📋 복사해서 메신저로</button>
+          <button class="btn" data-way="pdf" type="button">📄 PDF 보고서 열기</button>
+        </div>
+        <p class="muted small">문자 보내기는 휴대폰에서 바로 열리고, PC에서는 Windows '휴대폰과 연결' 등 문자 앱이 있을 때 열립니다.</p></div>
+      <p id="send-msg" class="small" role="status"></p>
+    </div>
+    <div class="row" style="justify-content:flex-end;margin-top:8px">
+      <button class="btn" data-close type="button">닫기</button>
+      <button class="btn primary" data-done type="button">${ins.reported ? "보고 완료 다시 기록" : "보냈음 → 보고 완료로 기록"}</button>
+    </div></div>`;
+  document.body.appendChild(back);
+  const close = () => back.remove();
+  const msg = $("#send-msg", back);
+  const body = () => $("#send-body", back).value;
+  const phones = () => $$("[data-mi]", back).filter((c) => c.checked)
+    .map((c) => (managers[+c.dataset.mi].phone || "").replace(/[^\d+]/g, "")).filter(Boolean);
+  $("[data-close]", back).onclick = close;
+  back.addEventListener("keydown", (e) => e.key === "Escape" && close());
+  $$("[data-way]", back).forEach((b) => (b.onclick = async () => {
+    const way = b.dataset.way;
+    const subject = `[급식 이상 보고] ${ins.unit_code} ${ins.started_at.slice(0, 10)}`;
+    if (way === "sms") {
+      const to = phones();
+      // 아이폰은 받는 사람을 쉼표로, '&body=', 안드로이드는 '?body='를 읽음
+      const sep = /iPhone|iPad|Mac/i.test(navigator.userAgent) ? "&" : "?";
+      location.href = `sms:${to.join(",")}${sep}body=${encodeURIComponent(body())}`;
+      msg.textContent = to.length ? `문자 앱을 열었습니다 (${to.length}명). 보낸 뒤 '보고 완료로 기록'을 누르세요.` : "받는 사람 번호 없이 문자 앱을 열었습니다. 받는 사람을 직접 고르세요.";
+    } else if (way === "mail") {
+      location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(`${body()}\n\nPDF 보고서: ${pdfUrl}`)}`;
+      msg.textContent = "메일 프로그램을 열었습니다. 받는 사람 주소를 넣고 보내세요.";
+    } else if (way === "share") {
+      try {
+        await navigator.share({ title: subject, text: body() });
+        msg.textContent = "공유했습니다. 보낸 뒤 '보고 완료로 기록'을 누르세요.";
+      } catch { msg.textContent = "공유를 취소했습니다."; }
+    } else if (way === "copy") {
+      let ok = false;
+      try { await navigator.clipboard.writeText(body()); ok = true; } catch {
+        const ta = $("#send-body", back);
+        ta.select();
+        ok = document.execCommand("copy");
+      }
+      msg.textContent = ok ? "복사했습니다. 메신저에 붙여 넣어 보내세요." : "복사하지 못했습니다. 내용을 직접 선택해 복사하세요.";
+    } else if (way === "pdf") {
+      window.open(`/report?id=${ins.id}`, "_blank");
+    }
+  }));
+  $("[data-done]", back).onclick = async () => {
+    try {
+      await api("POST", `inspections/${ins.id}/reported`);
+    } catch (e) { return toast(e.message); }
+    close();
+    toast("보고 완료로 기록했습니다. 검수 기록에 보고 시각이 남습니다.");
+    renderReport();
+  };
+  $("[data-way]", back).focus();
 }
 
 function issueEditor(it, ins) {
