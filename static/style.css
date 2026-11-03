@@ -158,7 +158,6 @@ input:focus, select:focus, textarea:focus, .btn:focus-visible { outline: 3px sol
 .banner.none h2 { color: var(--ink-2); }
 .status-line { font-size: 0.8rem; color: var(--ink-2); display: flex; gap: 8px 16px; flex-wrap: wrap; align-items: center; }
 .status-line .bad { color: var(--g1); font-weight: 700; }
-.notice-import { font-size: 0.8rem; background: var(--warn-soft); color: var(--warn); border-radius: 8px; padding: 8px 12px; }
 .grade-guide { display: grid; gap: 6px; padding: 12px 14px; margin-bottom: 12px; border-radius: 10px; background: #f6f2e7; border: 1px solid var(--line); font-size: 0.85rem; }
 .grade-guide > div { display: flex; gap: 10px; align-items: baseline; }
 .grade-guide .badge { flex: none; min-width: 58px; justify-content: center; }

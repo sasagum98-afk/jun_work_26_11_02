@@ -460,8 +460,6 @@ async function renderInspect() {
   <section class="view">
     <div id="banner"></div>
     <div class="status-line" id="status-line">${statusText(state.status)}</div>
-    <div class="notice-import"><b>수입식품 부적합 (2026-11-03 확인)</b> · 식품안전나라 Open API에는 수입식품 <u>통관 단계</u> 부적합 자료가 없습니다(부적합 자료는 국내 I2620·농산물 I2640뿐).
-      국내에서 팔리다 회수된 수입 제품은 회수 공지(I0490)에 함께 나오므로 그대로 조회됩니다. 통관 단계 부적합은 수입식품정보마루(impfood.mfds.go.kr)에서 따로 확인하세요.</div>
     <div id="inspect-box"></div>
     <div class="card">
       <div class="row" style="justify-content:space-between;margin-bottom:8px">
