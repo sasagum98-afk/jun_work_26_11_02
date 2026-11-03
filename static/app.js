@@ -460,12 +460,19 @@ async function renderInspect() {
   <section class="view">
     <div id="banner"></div>
     <div class="status-line" id="status-line">${statusText(state.status)}</div>
-    <div class="notice-import">수입식품 부적합은 아직 조회하지 않습니다 (서비스 코드 확인 후 추가 예정).</div>
+    <div class="notice-import"><b>수입식품 부적합 (2026-11-03 확인)</b> · 식품안전나라 Open API에는 수입식품 <u>통관 단계</u> 부적합 자료가 없습니다(부적합 자료는 국내 I2620·농산물 I2640뿐).
+      국내에서 팔리다 회수된 수입 제품은 회수 공지(I0490)에 함께 나오므로 그대로 조회됩니다. 통관 단계 부적합은 수입식품정보마루(impfood.mfds.go.kr)에서 따로 확인하세요.</div>
     <div id="inspect-box"></div>
     <div class="card">
       <div class="row" style="justify-content:space-between;margin-bottom:8px">
         <h2>최근 회수·부적합 공지</h2>
         <div class="row" id="notice-ctl"></div>
+      </div>
+      <div class="grade-guide" aria-label="회수 등급 설명">
+        <div><span class="badge g1">1등급</span><span><b>가장 위험</b> · 먹으면 건강에 심각한 피해가 생길 수 있음. 예: 유리조각 혼입, 아플라톡신·DEHP 기준 초과, 허용 안 된 색소, 무등록 제조·날짜 미표시</span></div>
+        <div><span class="badge g2">2등급</span><span><b>주의</b> · 건강에 일시적인 피해가 생길 수 있음. 예: 잔류농약 기준 초과, 카드뮴·메틸수은 등 중금속, 황색포도상구균</span></div>
+        <div><span class="badge g3">3등급</span><span><b>기준 위반</b> · 건강 피해 가능성은 낮지만 기준을 어김. 예: 세균수·대장균 기준 부적합, 금속성 이물 기준, 영양 성분 함량 부족</span></div>
+        <p class="small muted">예시는 최근 회수 공지에 실제로 많이 나온 사유입니다. 등급은 회수 공지에만 매겨지고, 검사 부적합 공지는 등급 대신 부적합 항목·검사결과를 봅니다. 등급이 낮아도 회수 대상과 같은 제품이면 급식에 쓰지 않습니다.</p>
       </div>
       <div id="notices"><p class="muted">불러오는 중…</p></div>
     </div>
