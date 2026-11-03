@@ -1359,7 +1359,7 @@ async function renderReport() {
     </div>
     <div class="card send-bar">
       <div><b>이상 품목 ${issues.length}건을 관리자에게 보고합니다</b>
-        <div class="muted small">받는 사람을 고르고 문자·이메일·공유로 보낸 뒤 '보고 완료'로 기록합니다.</div></div>
+        <div class="muted small">받는 사람을 고르고 문자·이메일·공유로 보낸 뒤 '보고 완료'로 기록${ins.closed_at ? "합니다." : "하고 검수를 마칩니다."}</div></div>
       <button class="btn primary big-send" id="send-report" type="button">📤 보고하기</button>
     </div>` : ""}
   </section>`;
@@ -1437,7 +1437,7 @@ async function sendReportDialog(ins, managers) {
     </div>
     <div class="row" style="justify-content:flex-end;margin-top:8px">
       <button class="btn" data-close type="button">닫기</button>
-      <button class="btn primary" data-done type="button">${ins.reported ? "보고 완료 다시 기록" : "보냈음 → 보고 완료로 기록"}</button>
+      <button class="btn primary" data-done type="button">${ins.closed_at ? (ins.reported ? "보고 완료 다시 기록" : "보냈음 → 보고 완료로 기록") : "보냈음 → 보고 완료 + 검수 마침"}</button>
     </div></div>`;
   document.body.appendChild(back);
   const close = () => back.remove();
@@ -1477,12 +1477,22 @@ async function sendReportDialog(ins, managers) {
     }
   }));
   $("[data-done]", back).onclick = async () => {
+    // 진행 중인 회차면 보고 완료와 함께 검수도 마침 (지난 회차는 보고 시각만 남김)
+    const finish = !ins.closed_at;
     try {
       await api("POST", `inspections/${ins.id}/reported`);
+      if (finish) await api("POST", `inspections/${ins.id}/close`);
     } catch (e) { return toast(e.message); }
     close();
-    toast("보고 완료로 기록했습니다. 검수 기록에 보고 시각이 남습니다.");
-    renderReport();
+    if (finish) {
+      state.current = null;
+      state.search = null;
+      toast("보고 완료로 기록하고 검수를 마쳤습니다. 검수 기록에서 다시 볼 수 있습니다.");
+      location.hash = "records";
+    } else {
+      toast("보고 완료로 기록했습니다. 검수 기록에 보고 시각이 남습니다.");
+      renderReport();
+    }
   };
   $("[data-way]", back).focus();
 }
