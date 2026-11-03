@@ -176,6 +176,9 @@ class Store:
     def current_inspection(self, uid):
         return self._one("SELECT * FROM inspections WHERE user_id=? AND closed_at IS NULL ORDER BY id DESC LIMIT 1", (uid,))
 
+    def set_vendor(self, iid, vendor):
+        self._run("UPDATE inspections SET vendor=? WHERE id=?", (vendor, iid))
+
     def close_inspection(self, iid):
         self._run("UPDATE inspections SET closed_at=? WHERE id=? AND closed_at IS NULL", (now(), iid))
 

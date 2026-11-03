@@ -178,8 +178,23 @@ table.list tr.click:hover td { background: var(--navy-soft); }
 .pager { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 .pager .btn { min-width: 48px; padding: 4px 10px; }
 .pager .btn.on { background: var(--navy); color: #fff; border-color: var(--navy); }
-.notice-item { border-bottom: 1px solid var(--line); padding: 10px 0; display: grid; gap: 4px; font-size: 0.85rem; }
-.notice-item:last-child { border-bottom: 0; }
+.notice-item { border-bottom: 1px solid var(--line); padding: 10px 0; font-size: 0.85rem; }
+.notice-item:last-of-type { border-bottom: 0; }
+
+/* 누를 수 있는 공지·배너 항목 */
+button.pick {
+  display: flex; gap: 12px; align-items: center; width: 100%; text-align: left; background: transparent;
+  border: 0; border-radius: 8px; padding: 8px; cursor: pointer; font: inherit; color: inherit; min-height: 56px;
+}
+button.notice-item.pick { border-bottom: 1px solid var(--line); border-radius: 0; }
+button.pick:hover { background: rgba(31, 47, 92, 0.07); }
+.banner button.pick:hover { background: rgba(179, 38, 43, 0.08); }
+.thumb {
+  flex: 0 0 64px; width: 64px; height: 64px; object-fit: contain; border: 1px solid var(--line);
+  border-radius: 6px; background: #fff;
+}
+.thumb.none { display: inline-flex; align-items: center; justify-content: center; text-align: center; font-size: 0.65rem; color: var(--ink-3); line-height: 1.2; }
+.modal.wide { max-width: 880px; }
 
 /* 보고 */
 .issue-card { border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; display: grid; gap: 12px; }

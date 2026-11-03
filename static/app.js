@@ -18,6 +18,7 @@ const BASIS_LABEL = { I0490: "I0490 회수", I2620: "I2620 부적합", I2715: "I
 const UNITS = ["kg", "g", "박스", "개", "봉", "팩", "캔", "병", "L", "망", "포대", "단"];
 const RANKS = ["하사", "중사", "상사", "원사", "준위", "소위", "중위", "대위", "소령", "중령", "대령", "군무원"];
 const CAND_PAGE = 5;
+const VENDOR_NONE = "납품업체 미입력";
 
 const state = {
   me: null,
@@ -25,7 +26,8 @@ const state = {
   banner: [],
   bannerOpen: false,
   current: null, // { inspection, items, ... }
-  method: "",
+  method: "barcode",
+  pendingVendor: "",
   search: null, // { method, barcode, q, company, items, page }
   notice: { source: "all", grade: "all", size: 5, page: 1 },
   records: { openId: null },
@@ -414,8 +416,9 @@ async function loadBanner() {
   const shown = state.bannerOpen ? list : list.slice(0, 3);
   box.innerHTML = `<div class="banner" role="alert">
     <h2>긴급 · 최근 30일 1등급 회수 공지 ${list.length}건</h2>
-    <ul>${shown.map((r) => `<li><span class="badge g1">1등급</span> <b>${esc(r.name)}</b> · ${esc(r.company)} · ${esc(r.created)}
-      ${r.reason ? `<div class="small muted">${esc(r.reason.slice(0, 120))}</div>` : ""}</li>`).join("")}</ul>
+    <ul>${shown.map((r, i) => `<li><button type="button" class="pick" data-bidx="${i}">${thumb(r)}<span><span class="badge g1">1등급</span> <b>${esc(r.name)}</b> · ${esc(r.company)} · ${esc(r.created)}
+      ${r.reason ? `<span class="small muted" style="display:block">${esc(r.reason.slice(0, 120))}</span>` : ""}</span></button></li>`).join("")}</ul>
+    <p class="small muted" style="margin:6px 0 0">항목을 누르면 제품 사진과 날짜를 크게 봅니다.</p>
     <div class="row" style="margin-top:8px;gap:8px">
       ${list.length > 3 ? `<button class="btn small" id="banner-more">${state.bannerOpen ? "접기" : `외 ${list.length - 3}건 더 보기`}</button>` : ""}
       <button class="btn small" id="banner-read" ${TTS_OK ? "" : "disabled"}>긴급 공지 읽어 주기</button>
@@ -423,6 +426,7 @@ async function loadBanner() {
   </div>`;
   $("#banner-read").onclick = () => speak(sayable(`최근 30일 1등급 회수 공지 ${list.length}건. ` +
     shown.map((r, i) => `${i + 1}번. ${r.name}, ${r.company}. ${r.reason || ""}.`).join(" ")));
+  $$("[data-bidx]", box).forEach((b) => (b.onclick = () => showDetail(shown[+b.dataset.bidx])));
   const more = $("#banner-more");
   if (more) more.onclick = () => { state.bannerOpen = !state.bannerOpen; loadBanner(); };
 }
@@ -456,51 +460,37 @@ async function loadNotices() {
     box.innerHTML = `<p class="muted">표시할 공지가 없습니다.</p>`;
     return;
   }
-  box.innerHTML = r.items.map((x) => `
-    <div class="notice-item">
-      <div class="row" style="gap:6px"><span class="badge src">${x.source === "I0490" ? "회수" : "부적합"}</span>${gradeBadge(x)}
-        <b>${esc(x.name)}</b><span class="muted">${esc(x.company)}</span><span class="muted small" style="margin-left:auto">${esc(x.created || x.created_raw)}</span></div>
-      <div class="small muted">${esc(x.source === "I0490" ? x.reason : [x.test_item, x.test_result && `결과 ${x.test_result}`, x.standard && `기준 ${x.standard}`].filter(Boolean).join(" · "))}</div>
-    </div>`).join("") + pager(r.total, r.page, r.size, "data-npage");
+  box.innerHTML = r.items.map((x, i) => `
+    <button type="button" class="notice-item pick" data-nidx="${i}">${thumb(x)}<span class="grow" style="display:grid;gap:4px">
+      <span class="row" style="gap:6px"><span class="badge src">${x.source === "I0490" ? "회수" : "부적합"}</span>${gradeBadge(x)}
+        <b>${esc(x.name)}</b><span class="muted">${esc(x.company)}</span><span class="muted small" style="margin-left:auto">${esc(x.created || x.created_raw)}</span></span>
+      <span class="small muted">${esc(x.source === "I0490" ? x.reason : [x.test_item, x.test_result && `결과 ${x.test_result}`, x.standard && `기준 ${x.standard}`].filter(Boolean).join(" · "))}</span>
+    </span></button>`).join("") + pager(r.total, r.page, r.size, "data-npage");
   $$("[data-npage]", box).forEach((b) => (b.onclick = () => { n.page = +b.dataset.npage; loadNotices(); }));
+  $$("[data-nidx]", box).forEach((b) => (b.onclick = () => showDetail(r.items[+b.dataset.nidx])));
 }
 
 function renderInspectBox() {
   const box = $("#inspect-box");
   if (!box) return;
+  // 검수 시작 버튼 없이 바로 조회할 수 있게 하고, 첫 품목을 기록할 때 회차를 자동으로 만든다
   const cur = state.current;
-  if (!cur) {
-    box.innerHTML = `
-    <form class="card stack" id="start-form">
-      <h2>검수 시작</h2>
-      <div class="row">
-        <label class="field" style="flex:0 0 220px">날짜<input type="text" value="${nowText()}" readonly></label>
-        <label class="field grow">납품업체<input type="text" name="vendor" list="vendors" required placeholder="예: △△유통"></label>
-      </div>
-      <datalist id="vendors"></datalist>
-      <button class="btn primary" type="submit">검수 시작</button>
-    </form>`;
-    api("GET", "vendors").then((r) => {
-      const dl = $("#vendors");
-      if (dl) dl.innerHTML = r.items.map((v) => `<option value="${esc(v)}">`).join("");
-    }).catch(() => {});
-    $("#start-form").onsubmit = async (e) => {
-      e.preventDefault();
-      try {
-        state.current = await api("POST", "inspections", { vendor: e.target.vendor.value });
-        state.method = "barcode";
-        renderInspectBox();
-      } catch (err) { toast(err.message); }
-    };
-    return;
-  }
-  const ins = cur.inspection;
-  const pass = cur.items.filter((i) => i.result === "pass").length;
-  const issue = cur.items.filter((i) => i.result === "issue").length;
+  const ins = cur ? cur.inspection : null;
+  const items = cur ? cur.items : [];
+  const pass = items.filter((i) => i.result === "pass").length;
+  const issue = items.filter((i) => i.result === "issue").length;
   box.innerHTML = `
   <div class="card stack">
     <div class="row" style="justify-content:space-between">
-      <div><h2>검수 중 · ${esc(ins.vendor)}</h2><div class="muted small">시작 ${esc(ins.started_at.slice(0, 16))} · 회차 ${ins.id}</div></div>
+      <div class="grow">
+        ${ins ? `<h2>검수 중 · ${esc(ins.vendor)} <button class="btn small ghost" id="vendor-edit" type="button">납품업체 바꾸기</button></h2>
+          <div class="muted small">시작 ${esc(ins.started_at.slice(0, 16))} · 회차 ${ins.id}</div>`
+        : `<h2>검수 · ${nowText()}</h2>
+          <label class="field" style="margin-top:8px;max-width:420px">납품업체 (선택, 나중에 바꿀 수 있음)
+            <input type="text" id="vendor-in" list="vendors" placeholder="예: △△유통" value="${esc(state.pendingVendor || "")}"></label>
+          <datalist id="vendors"></datalist>
+          <div class="muted small" style="margin-top:4px">아래에서 바로 조회하세요. 첫 품목을 기록하면 검수 회차가 자동으로 시작됩니다.</div>`}
+      </div>
       <div class="counter" aria-live="polite"><div>통과 <b>${pass}</b>건</div><div style="background:var(--g1-soft);color:var(--g1)">이상 <b>${issue}</b>건</div></div>
     </div>
     <div class="methods" role="group" aria-label="확인 방법">
@@ -515,14 +505,37 @@ function renderInspectBox() {
     </div>
     <div id="method-panel" class="panel"></div>
     <div id="results"></div>
-    <div class="row" style="justify-content:flex-end;border-top:1px solid var(--line);padding-top:16px">
+    ${ins ? `<div class="row" style="justify-content:flex-end;border-top:1px solid var(--line);padding-top:16px">
       <button class="btn" id="close-insp">검수 마치기</button>
       <button class="btn primary" id="go-report">보고하기 (이상 ${issue}건)</button>
-    </div>
+    </div>` : ""}
   </div>`;
-  $$("[data-method]").forEach((b) => (b.onclick = () => { state.method = b.dataset.method; state.search = null; renderInspectBox(); }));
+  $$("[data-method]").forEach((b) => (b.onclick = () => {
+    state.method = b.dataset.method;
+    state.search = null;
+    renderInspectBox();
+    renderMethodPanel(true);
+  }));
   $("#auto-read").onchange = (e) => { prefSet("autoRead", e.target.checked); if (!e.target.checked) stopSpeak(); };
   $("#stop-read").onclick = stopSpeak;
+  renderMethodPanel();
+  renderResults();
+  if (!ins) {
+    $("#vendor-in").oninput = (e) => { state.pendingVendor = e.target.value; };
+    api("GET", "vendors").then((r) => {
+      const dl = $("#vendors");
+      if (dl) dl.innerHTML = r.items.map((v) => `<option value="${esc(v)}">`).join("");
+    }).catch(() => {});
+    return;
+  }
+  $("#vendor-edit").onclick = async () => {
+    const v = prompt("납품업체 이름", ins.vendor === VENDOR_NONE ? "" : ins.vendor);
+    if (v === null || !v.trim()) return;
+    try {
+      state.current = await api("PUT", `inspections/${ins.id}`, { vendor: v.trim() });
+      renderInspectBox();
+    } catch (err) { toast(err.message); }
+  };
   $("#go-report").onclick = () => { location.hash = "report"; };
   $("#close-insp").onclick = async () => {
     if (issue && !ins.reported && !confirm("아직 보고 완료로 기록하지 않은 이상 품목이 있습니다. 그래도 검수를 마칠까요?")) return;
@@ -532,13 +545,12 @@ function renderInspectBox() {
     toast("검수를 마쳤습니다. 검수 기록에서 다시 볼 수 있습니다.");
     renderInspectBox();
   };
-  renderMethodPanel();
-  renderResults();
 }
 
 /* ---------- 확인 방법 패널 */
 
-function renderMethodPanel() {
+// focus: 확인 방법 버튼을 눌렀을 때만 입력칸으로 옮김 (처음 열 때 화면이 아래로 튀지 않게)
+function renderMethodPanel(focus) {
   const p = $("#method-panel");
   stopCamera();
   if (listening) listening.stop();
@@ -569,11 +581,12 @@ function renderMethodPanel() {
       if (!bc) return toast("바코드 숫자를 입력하세요");
       doSearch({ method: "barcode", barcode: bc });
     };
-    $("#bc-input").focus();
+    if (focus) $("#bc-input").focus();
   } else if (state.method === "ocr") {
     p.innerHTML = `
     <div class="stack">
       <div class="row">
+        <button class="btn" id="ocr-cam" type="button">웹캠으로 찍기</button>
         <label class="btn">포장지 사진 올리기<input type="file" accept="image/*" id="ocr-file" class="hidden"></label>
         <span class="muted small">제품명이 크게 보이도록 찍은 사진이 잘 읽힙니다.</span>
       </div>
@@ -590,6 +603,10 @@ function renderMethodPanel() {
       <p class="muted small">글자 인식은 틀릴 수 있습니다. 품목명을 실물과 대조해 고친 뒤 조회하세요.</p>
     </div>`;
     $("#ocr-file").onchange = (e) => e.target.files[0] && runOcr(e.target.files[0]);
+    $("#ocr-cam").onclick = async () => {
+      const f = await captureFromCamera("포장지 찍기");
+      if (f) runOcr(f);
+    };
     $("#ocr-form").onsubmit = (e) => {
       e.preventDefault();
       const q = $("#ocr-q").value.trim();
@@ -608,7 +625,7 @@ function renderMethodPanel() {
       e.preventDefault();
       doSearch({ method: "manual", q: $("#man-q").value.trim(), company: $("#man-c").value.trim() });
     };
-    $("#man-q").focus();
+    if (focus) $("#man-q").focus();
   }
   bindMics(p);
 }
@@ -675,6 +692,53 @@ function gotBarcode(text) {
   }
   if (msg) msg.textContent = `읽은 바코드: ${bc}`;
   doSearch({ method: "barcode", barcode: bc });
+}
+
+/* 웹캠으로 한 장 찍기. 찍은 사진(File)을 돌려주고, 취소하거나 웹캠이 없으면 null */
+function captureFromCamera(title) {
+  return new Promise((resolve) => {
+    const back = document.createElement("div");
+    back.className = "modal-back";
+    back.innerHTML = `<div class="modal wide" role="dialog" aria-modal="true" aria-label="${esc(title)}">
+      <h2>${esc(title)}</h2>
+      <video class="cam" autoplay muted playsinline style="max-width:100%"></video>
+      <p class="small muted" role="status">웹캠을 켜는 중입니다…</p>
+      <div class="row" style="justify-content:flex-end">
+        <button class="btn" data-cancel type="button">취소</button>
+        <button class="btn primary" data-shot type="button" disabled>찍기</button>
+      </div></div>`;
+    document.body.appendChild(back);
+    const video = $("video", back);
+    const msg = $("[role=status]", back);
+    let stream = null;
+    const done = (file) => {
+      if (stream) stream.getTracks().forEach((t) => t.stop());
+      back.remove();
+      resolve(file);
+    };
+    $("[data-cancel]", back).onclick = () => done(null);
+    back.addEventListener("keydown", (e) => e.key === "Escape" && done(null));
+    $("[data-shot]", back).onclick = () => {
+      const c = document.createElement("canvas");
+      c.width = video.videoWidth;
+      c.height = video.videoHeight;
+      c.getContext("2d").drawImage(video, 0, 0);
+      c.toBlob((b) => done(b ? new File([b], "webcam.jpg", { type: "image/jpeg" }) : null), "image/jpeg", 0.92);
+    };
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      msg.textContent = "이 브라우저에서는 웹캠을 쓸 수 없습니다. 사진 파일을 올리세요.";
+      return;
+    }
+    navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1920 }, height: { ideal: 1080 } } }).then((s) => {
+      stream = s;
+      video.srcObject = s;
+      msg.textContent = "포장지가 화면에 크게, 흔들리지 않게 보이면 '찍기'를 누르세요.";
+      $("[data-shot]", back).disabled = false;
+      $("[data-shot]", back).focus();
+    }).catch(() => {
+      msg.textContent = "웹캠을 켤 수 없습니다. 웹캠 연결과 브라우저의 카메라 허용을 확인하거나, 사진 파일을 올리세요.";
+    });
+  });
 }
 
 function loadImage(file) {
@@ -794,12 +858,43 @@ function resultsSpeech() {
   return t;
 }
 
+function imageSrc(r, i) {
+  return `/api/image?src=${r.source}&seq=${encodeURIComponent(r.seq)}&i=${i}`;
+}
+
+function thumb(r) {
+  if (!r.image_count) return `<span class="thumb none" aria-hidden="true">사진<br>없음</span>`;
+  return `<img class="thumb" loading="lazy" src="${imageSrc(r, 0)}" alt="" onerror="this.outerHTML='<span class=&quot;thumb none&quot;>사진<br>없음</span>'">`;
+}
+
+/* 공지·배너에서 누른 제품: 결과 카드와 같은 모양으로 크게 보여 주고 바로 기록할 수 있게 */
+function showDetail(rec) {
+  stopSpeak();
+  const r = { ...rec, match_by: "공지에서 선택", company_match: false };
+  const back = document.createElement("div");
+  back.className = "modal-back";
+  back.innerHTML = `<div class="modal wide" role="dialog" aria-modal="true" aria-label="${esc(r.name)} 상세">
+    ${candidateCard(r, 0)}
+    <div class="row" style="justify-content:flex-end"><button class="btn" data-close>닫기</button></div>
+  </div>`;
+  document.body.appendChild(back);
+  const close = () => { stopSpeak(); back.remove(); };
+  $("[data-close]", back).onclick = close;
+  back.onclick = (e) => { if (e.target === back) close(); };
+  back.addEventListener("keydown", (e) => e.key === "Escape" && close());
+  const ctx = () => { state.search = { method: "manual", q: r.name, items: [r], total: 1, page: 1 }; };
+  $("[data-match]", back).onclick = async () => { ctx(); close(); await recordMatch(r); };
+  $("[data-mismatch]", back).onclick = async () => { ctx(); close(); await recordPass("lot_mismatch", r); };
+  $("[data-say]", back).onclick = () => speak(candidateSpeech(r));
+  $("[data-close]", back).focus();
+}
+
 function productImages(r) {
   if (!r.image_count) return "";
   const n = Math.min(r.image_count, 3);
   const imgs = [];
   for (let i = 0; i < n; i++) {
-    const src = `/api/image?src=${r.source}&seq=${encodeURIComponent(r.seq)}&i=${i}`;
+    const src = imageSrc(r, i);
     imgs.push(`<a href="${src}" target="_blank" rel="noopener"><img class="prod-img" loading="lazy" src="${src}" alt="${esc(r.name)} 제품 사진 ${i + 1}"
       onerror="this.parentNode.remove()"></a>`);
   }
@@ -913,6 +1008,10 @@ function searchName(s, rec) {
 }
 
 async function addItem(body) {
+  if (!state.current) {
+    state.current = await api("POST", "inspections", { vendor: (state.pendingVendor || "").trim() || VENDOR_NONE });
+    state.pendingVendor = "";
+  }
   const ins = state.current.inspection;
   await api("POST", `inspections/${ins.id}/items`, body);
   await loadCurrent();
@@ -972,7 +1071,13 @@ function visualDialog() {
     </div>
     <datalist id="unit-list">${UNITS.map((u) => `<option value="${u}">`).join("")}</datalist>
     <label class="field">메모 (선택)${withMic(`<input type="text" name="memo" id="v-memo" placeholder="예: 겉잎 물러짐, 냄새">`, "v-memo")}</label>
-    <label class="field">사진 (선택, PDF 보고서에만 들어감)<input type="file" name="photo" accept="image/jpeg,image/png,image/webp"></label>
+    <div class="field">사진 (선택, PDF 보고서에만 들어감)
+      <div class="row">
+        <button class="btn small" type="button" data-vcam>웹캠으로 찍기</button>
+        <input type="file" name="photo" accept="image/jpeg,image/png,image/webp" style="flex:1">
+      </div>
+      <span class="small muted" data-vcam-msg></span>
+    </div>
     <div class="row" style="justify-content:flex-end">
       <button class="btn" type="button" data-cancel>취소</button>
       <button class="btn primary" type="submit">보고 목록에 담기</button>
@@ -988,9 +1093,15 @@ function visualDialog() {
   };
   $("[data-cancel]", back).onclick = close;
   back.addEventListener("keydown", (e) => e.key === "Escape" && close());
+  let shot = null;
+  $("[data-vcam]", back).onclick = async () => {
+    shot = await captureFromCamera("이상 품목 찍기");
+    if (shot) $("[data-vcam-msg]", back).textContent = "웹캠 사진 1장이 준비됐습니다.";
+  };
   form.onsubmit = async (e) => {
     e.preventDefault();
     const f = new FormData(form);
+    if (shot) f.set("photo", shot);
     try {
       await addItem({
         result: "issue", basis: "visual", match: s.items && s.items.length ? "lot_mismatch" : "none",
@@ -1139,7 +1250,8 @@ function issueEditor(it, ins) {
     <datalist id="unit-list-r">${UNITS.map((u) => `<option value="${u}">`).join("")}</datalist>
     <div class="row">
       <span data-photo>${it.has_photo ? `<img class="photo-thumb" src="/api/items/${it.id}/photo?t=${Date.now()}" alt="첨부 사진">` : `<span class="muted small">사진 없음</span>`}</span>
-      <label class="btn small">${it.has_photo ? "사진 바꾸기" : "사진 첨부"}<input type="file" accept="image/jpeg,image/png,image/webp" class="hidden" data-photo-in></label>
+      <button class="btn small" type="button" data-photo-cam>웹캠으로 찍기</button>
+      <label class="btn small">${it.has_photo ? "사진 파일 바꾸기" : "사진 파일 첨부"}<input type="file" accept="image/jpeg,image/png,image/webp" class="hidden" data-photo-in></label>
       ${it.has_photo ? `<button class="btn small" data-photo-del>사진 빼기</button>` : ""}
       <span class="muted small">사진은 PDF 보고서에만 들어갑니다.</span>
       <button class="btn small ghost" data-del style="margin-left:auto;color:var(--g1)">보고 목록에서 빼기</button>
@@ -1157,6 +1269,17 @@ function issueEditor(it, ins) {
       } catch (e) { toast(e.message); }
     };
   });
+  const upload = async (f) => {
+    try {
+      await api("POST", `items/${it.id}/photo`, undefined, f);
+      it.has_photo = true;
+      el.replaceWith(issueEditor(it, ins));
+    } catch (err) { toast(err.message); }
+  };
+  $("[data-photo-cam]", el).onclick = async () => {
+    const f = await captureFromCamera(`${it.name || "이상 품목"} 찍기`);
+    if (f) upload(f);
+  };
   $("[data-photo-in]", el).onchange = async (e) => {
     const f = e.target.files[0];
     if (!f) return;

@@ -38,7 +38,7 @@ METHOD_LABEL = {"barcode": "바코드", "ocr": "글자 인식", "manual": "입�
 MATCH_LABEL = {"none": "후보 없음", "lot_match": "로트 일치", "lot_mismatch": "후보 있었으나 로트 불일치", "": ""}
 PHOTO_TYPES = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
 IMAGE_EXT = {".jpg": "image/jpeg", ".png": "image/png", ".gif": "image/gif", ".webp": "image/webp"}
-MAX_IMAGE = 5_000_000
+MAX_IMAGE = 15_000_000  # 식품안전나라 제품 사진은 원본 크기(가로 3000px 안팎)로 옴
 
 
 def load_env():
@@ -319,6 +319,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self.fail("검수 회차를 찾을 수 없습니다", 404)
             sub = m.group(2) or ""
             if sub == "" and method == "GET":
+                return self.send_json(self.inspection_payload(iid, unit, u))
+            if sub == "" and method == "PUT":
+                vendor = (self.body_json().get("vendor") or "").strip()
+                if not vendor:
+                    return self.fail("납품업체를 입력하세요")
+                s.set_vendor(iid, vendor[:100])
                 return self.send_json(self.inspection_payload(iid, unit, u))
             if sub == "/items" and method == "POST":
                 return self.api_add_item(insp)
