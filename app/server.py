@@ -261,7 +261,10 @@ class Handler(BaseHTTPRequestHandler):
         if p == "cron":
             # 온라인판 자료 갱신: 1시간이 지났을 때만 실제로 받음 (누가 불러도 그 이상 자주 받지 않음)
             r = self.app.food.refresh_if_stale()
-            return self.send_json({**r, "fetched_at": self.app.food.status()["fetched_at"]})
+            st = self.app.food.status()
+            # 오류 문구는 FoodData가 인증키를 지운 것만 내보냄
+            return self.send_json({**r, "fetched_at": st["fetched_at"], "error_kind": st["error_kind"],
+                                   "error_msg": st["error_msg"], "counts": st["counts"]})
         if method == "POST" and p == "signup":
             return self.api_signup()
         if method == "POST" and p == "login":
